@@ -10,29 +10,29 @@
 #include <avr/interrupt.h>
 volatile int speedTimer = 0;
 volatile int speedDisp = 0;
-volatile char refresh = 1;			//флаг обновления показаний спидометра
-volatile unsigned long total_rotations = 0;	//счетчик оборотов колеса (по нему будут определяться показания одометра)
+volatile char refresh = 1;			//speedometer value refresh flag
+volatile unsigned long total_rotations = 0;	//rotation counter
 double T = 0;						
-double C = 0;//окружность колеса
-volatile double speedKMH = 0;			//скорость в км/час
+double C = 0;//wheel circumference
+volatile double speedKMH = 0;			//speed km/h
 volatile uint8_t arrowMoving = 0;
 int newSteps = 0;
-uint8_t signalOn = 0;//если включен поворот или аварийка, = 1
+uint8_t signalOn = 0;//if turn or hazard lights on, = 1
 uint8_t firstMeasure = 0;
 
 uint8_t contrast = 0;
 uint8_t magnets = 6;
-double ratio = 1; //передаточное число (нужно, если датчикустановлен не на колесе)
-double WEEL_D = 0.70;			//диаметр колеса в метрах
-unsigned int PWM_arrow = 1023;// из 1000
-unsigned int PWM_digits = 1023;// из 1000
-double DEG_PER_KMH = 1.275;	//градусов на км/час на шкале
-uint8_t SCALE_MAX	=190;		//максимум на спидометре
+double ratio = 1; //gear ratio (needed if magnets are not on the wheel)
+double WEEL_D = 0.70;			//wheel diameter
+unsigned int PWM_arrow = 1023;// of 1000
+unsigned int PWM_digits = 1023;// of 1000
+double DEG_PER_KMH = 1.275;	//degrees per km/h
+uint8_t SCALE_MAX	= 190;		//speed max value
 uint8_t SHUT_DOWN_VOLTAGEx10= 80;
 uint8_t step_interval =150;
-uint8_t SM_STEPS=	96;		//количество шагов ШД (ШД от сканера Musteck - 96 шагов)
+uint8_t SM_STEPS=	96;		//stepper motor steps
 
-unsigned int signalCounter = 0;//счетчик длительности интервала сигнала поворота
+unsigned int signalCounter = 0;//counter of turn lights interval
 unsigned long dist = 0;
 unsigned long newDist = 0;
 double kmh_per_step = 0;
@@ -42,11 +42,11 @@ double kmh_per_step = 0;
 //uint8_t debug3 = 0;
 
 
-#define pi 3.141592653		//число пи
+#define pi 3.141592653		//pi
 #define PRESCALER 256
-#define TIC  20			//количество тиков Timer2 (при F_CPU 16Mhz и presc=256 1 тик = 16 мкс). Количество тиков определяет минимальный период отсчета времени между проходами магнита 
-#define AREF 2.5			//опорное напряжение
-#define DEVIDER 6			//коэффициент делителя (для измерения напряжения на батарее)
+#define TIC  20			//amount of Timer2 tics (F_CPU 16Mhz и presc=256 1 tic = 16 us). Defines the minimum period for counting time between Hall sensor triggering
+#define AREF 2.5			//reference voltage
+#define DEVIDER 6			//divider (for battery voltage measurement)
 
 
 
@@ -109,8 +109,8 @@ const unsigned char phase_arr_half_step [] = {
 void presets (void){
 
 
-C = WEEL_D * pi/magnets;					//длина окружности между магнитами
-T = 1.0/(F_CPU/PRESCALER);//период отсчета времени в секундах (16 мкс) (prsc=256)
+C = WEEL_D * pi/magnets;					//circumferential length between the magnets
+T = 1.0/(F_CPU/PRESCALER);//counter tic time interval in seconds (16 us) (prsc=256)
 
 	
 DDRA|=_BV(3); //ENABLE 1
@@ -124,70 +124,54 @@ DDRD|=_BV(5);//PWM ARROW LIGHT
 PORTA|=_BV(3);//ENABLE 1 high (disabled)
 PORTA|=_BV(0);//ENABLE 2 high (disabled)
 
-PORTB|=_BV(5);//внутренняя подтяжка для внешних кнопок
+PORTB|=_BV(5);//internal pull-up for external buttons
 PORTB|=_BV(6);
 PORTB|=_BV(7);
 	
-		//=======================АЦП
+		//=======================ADC
 		ADCSRA |= _BV(ADEN);
 		//=======================
 		ADCSRA |= _BV(ADPS0);		//
-		ADCSRA |= _BV(ADPS1);		// Прескейлер 128
+		ADCSRA |= _BV(ADPS1);		// Prescaler 128
 		ADCSRA |= _BV(ADPS2);		//
 		//=======================
 	
-	//инициализация дисплея
+	//display initialization
 	GLCD_Setup();
 	GLCD_Clear();	
 	GLCD_Render();
-	//================= чтение сохраненных в EEPROM данных
+	//================= reading data from EEPROM
 	
 	
 	
 	
 	if(eeprom_read_byte(10)){
-		//====общее количество оборотов, 4 байта
-		//eeprom_write_byte(20, 0);
+		//====total rotations of the wheel, 3 bytes
+		
 		eeprom_write_byte(21, 1);
 		eeprom_write_byte(22, 204);
-		eeprom_write_byte(23, 204);//117964
-		//====заполнение ШИМ подсветки стрелки
+		eeprom_write_byte(23, 204);
+		//====Arrow illumination PWM
 		eeprom_write_byte(30, 255);
 		eeprom_write_byte(31, 200);
-		//====заполнение ШИМ подсветки циферблата
+		//====Dial illumination PWM
 		eeprom_write_byte(32, 0);
 		eeprom_write_byte(33, 50);
-		//====контраст дисплея
+		//====Display contrast
 		eeprom_write_byte(34, 255);
 		//====
 		eeprom_write_byte(10, 0);
 	}
 	
 	//==================
-	//unsigned long a = eeprom_read_byte(20);
-	//a=(a<<24);
+	
 	unsigned long b = eeprom_read_byte(21);
 	b=(b<<16);
 	unsigned long c = eeprom_read_byte(22);
 	c=(c<<8);
 	unsigned long d = eeprom_read_byte(23);
 	
-	total_rotations=b+c+d;  //a+
-	
-	//total_rotations=117964;
-	/*
-	b=eeprom_read_byte(30);
-	b=(b<<8);
-	c=eeprom_read_byte(31);
-	
-	PWM_arrow = b+c;
-	
-	b=eeprom_read_byte(32);
-	b=(b<<8);
-	c=eeprom_read_byte(33);
-	
-	PWM_digits = b+c;
-	*/
+	total_rotations=b+c+d;  
 	contrast= eeprom_read_byte(34);
 	
 	//ШИМ подсветки===============
@@ -201,8 +185,8 @@ arrow_calibration();
 
 
 
-MCUCR|= _BV(ISC11); // Внешнее прерывание по падающему фронту на INT1
-GICR|=_BV(INT1); // Разрешение внешнего прерывания на INT1
+MCUCR|= _BV(ISC11); // External falling edge interrupt INT1
+GICR|=_BV(INT1); // External Interrupt Enable INT1
 
 TCCR2|=_BV(CS21)|_BV(CS22)|_BV(WGM21);
 OCR2=TIC;
@@ -212,9 +196,6 @@ OCR2=TIC;
 
 sei();
 
-
-	
-//	total_rotations=0;
 
 }
 
@@ -287,7 +268,7 @@ void step(char mode){
 
 
 ISR( TIMER2_COMP_vect ){
-	speedTimer++; //инкрементация speedTimer каждый период Т (320 мкс)
+	speedTimer++; //speedTimer increment each period Т (320 us)
 	}
 ISR (TIMER1_OVF_vect){
 	if (signalOn) signalCounter++;
@@ -298,7 +279,7 @@ if (firstMeasure==0){
 	TIMSK|=_BV(OCIE2);
 	TCNT2=0;
 	firstMeasure = 1;
-	//при первом срабатывании датчика запускается TIMER2
+	//first triggering of the sensor starts TIMER2
 }
 else
 	{
@@ -525,13 +506,13 @@ for(int i=0;i<=contrast;i++){
 void speed_arrow_update(){
 				if (step_mode==FULL_STEP_ONE_PHASE)	 newSteps = speedKMH/kmh_per_step;//(12,75 градуса на 10 км/ч)
 				if (step_mode==HALF_STEP) newSteps = speedKMH/kmh_per_step;
-				int shiftSteps = steps-newSteps;//разница в показаниях спидометра (на сколько нужно сместить стрелку)
+				int shiftSteps = steps-newSteps;//difference in speedometer readings (how much the arrow should be shifted)
 				if (shiftSteps>0){dir = 0;}else {dir = 1;}
 				if (abs(shiftSteps)){
 					arrowMoving=1;
 					
 					TCCR0|=_BV(CS02)|_BV(CS00)|_BV(WGM01);
-					OCR0=step_interval;//интервал между шагами ШД
+					OCR0=step_interval;//interval between steps
 					TIMSK|=_BV(OCIE0);
 				}
 				
@@ -600,8 +581,8 @@ void signal_monitor(){
 			if((PINB&_BV(3))&&(PINB&_BV(4))){
 				GLCD_Clear();
 				GLCD_Render();
-				TIMSK|=_BV(TOIE1);// Зачем? А-а, понял. Если был включен поворот (стрелка), а в данный момент повороты не горят, запускается таймер.
-				//Это нужно, чтобы понять, это интервал между миганием поворотников, или сигнал поворота уже выключен.
+				TIMSK|=_BV(TOIE1);// If the turn signal (arrow) was switched on, and at the moment the turn signals are not lit, the timer is started.
+				//This is to see if this is the interval between the blinking of the turn signals, or if the turn signal is already off.
 			}
 			
 			if (signalCounter>300)
@@ -729,7 +710,7 @@ phase=0;
 		arrowMoving=1;
 		
 		TCCR0|=_BV(CS02)|_BV(CS00)|_BV(WGM01);
-		OCR0=step_interval;//интервал между шагами ШД
+		OCR0=step_interval;
 		TIMSK|=_BV(OCIE0);
 	
 
@@ -746,7 +727,7 @@ dir = 0;
 arrowMoving=1;
 
 TCCR0|=_BV(CS02)|_BV(CS00)|_BV(WGM01);
-OCR0=step_interval;//интервал между шагами ШД
+OCR0=step_interval;
 TIMSK|=_BV(OCIE0);
 
 while (arrowMoving)

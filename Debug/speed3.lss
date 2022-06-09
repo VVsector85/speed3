@@ -21,15 +21,15 @@ Idx Name          Size      VMA       LMA       File off  Algn
                   CONTENTS, READONLY, DEBUGGING
   8 .debug_abbrev 0000083c  00000000  00000000  0000b725  2**0
                   CONTENTS, READONLY, DEBUGGING
-  9 .debug_line   00001165  00000000  00000000  0000bf61  2**0
+  9 .debug_line   00001163  00000000  00000000  0000bf61  2**0
                   CONTENTS, READONLY, DEBUGGING
- 10 .debug_frame  00000b80  00000000  00000000  0000d0c8  2**2
+ 10 .debug_frame  00000b80  00000000  00000000  0000d0c4  2**2
                   CONTENTS, READONLY, DEBUGGING
- 11 .debug_str    00000b7f  00000000  00000000  0000dc48  2**0
+ 11 .debug_str    00000b7f  00000000  00000000  0000dc44  2**0
                   CONTENTS, READONLY, DEBUGGING
- 12 .debug_loc    000050fc  00000000  00000000  0000e7c7  2**0
+ 12 .debug_loc    000050fc  00000000  00000000  0000e7c3  2**0
                   CONTENTS, READONLY, DEBUGGING
- 13 .debug_ranges 00000380  00000000  00000000  000138c3  2**0
+ 13 .debug_ranges 00000380  00000000  00000000  000138bf  2**0
                   CONTENTS, READONLY, DEBUGGING
 
 Disassembly of section .text:
@@ -547,8 +547,8 @@ void step(char mode){
     129e:	de cf       	rjmp	.-68     	; 0x125c <step+0xbe>
 
 000012a0 <__vector_10>:
-	
-//	total_rotations=0;
+sei();
+
 
 }
 
@@ -630,7 +630,7 @@ ISR( TIMER2_COMP_vect ){
     1318:	11 24       	eor	r1, r1
     131a:	8f 93       	push	r24
     131c:	9f 93       	push	r25
-	speedTimer++; //инкрементация speedTimer каждый период Т (320 мкс)
+	speedTimer++; //speedTimer increment each period Т (320 us)
     131e:	80 91 24 01 	lds	r24, 0x0124
     1322:	90 91 25 01 	lds	r25, 0x0125
     1326:	01 96       	adiw	r24, 0x01	; 1
@@ -1108,7 +1108,7 @@ void speed_arrow_update(){
     167c:	0e 94 ab 1a 	call	0x3556	; 0x3556 <__fixsfsi>
     1680:	70 93 10 01 	sts	0x0110, r23
     1684:	60 93 0f 01 	sts	0x010F, r22
-				int shiftSteps = steps-newSteps;//разница в показаниях спидометра (на сколько нужно сместить стрелку)
+				int shiftSteps = steps-newSteps;//difference in speedometer readings (how much the arrow should be shifted)
     1688:	80 91 f9 00 	lds	r24, 0x00F9
     168c:	90 91 fa 00 	lds	r25, 0x00FA
     1690:	20 91 0f 01 	lds	r18, 0x010F
@@ -1134,7 +1134,7 @@ void speed_arrow_update(){
     16b8:	83 b7       	in	r24, 0x33	; 51
     16ba:	8d 60       	ori	r24, 0x0D	; 13
     16bc:	83 bf       	out	0x33, r24	; 51
-					OCR0=step_interval;//интервал между шагами ШД
+					OCR0=step_interval;//interval between steps
     16be:	80 91 62 00 	lds	r24, 0x0062
     16c2:	8c bf       	out	0x3c, r24	; 60
 					TIMSK|=_BV(OCIE0);
@@ -1956,7 +1956,7 @@ phase=0;
     1cfa:	83 b7       	in	r24, 0x33	; 51
     1cfc:	8d 60       	ori	r24, 0x0D	; 13
     1cfe:	83 bf       	out	0x33, r24	; 51
-		OCR0=step_interval;//интервал между шагами ШД
+		OCR0=step_interval;
     1d00:	80 91 62 00 	lds	r24, 0x0062
     1d04:	8c bf       	out	0x3c, r24	; 60
 		TIMSK|=_BV(OCIE0);
@@ -2002,7 +2002,7 @@ TCCR0|=_BV(CS02)|_BV(CS00)|_BV(WGM01);
     1d48:	83 b7       	in	r24, 0x33	; 51
     1d4a:	8d 60       	ori	r24, 0x0D	; 13
     1d4c:	83 bf       	out	0x33, r24	; 51
-OCR0=step_interval;//интервал между шагами ШД
+OCR0=step_interval;
     1d4e:	80 91 62 00 	lds	r24, 0x0062
     1d52:	8c bf       	out	0x3c, r24	; 60
 TIMSK|=_BV(OCIE0);
@@ -2163,11 +2163,11 @@ void signal_monitor(){
     1e46:	0e 94 0e 16 	call	0x2c1c	; 0x2c1c <GLCD_Clear>
 				GLCD_Render();
     1e4a:	0e 94 b2 11 	call	0x2364	; 0x2364 <GLCD_Render>
-				TIMSK|=_BV(TOIE1);// Зачем? А-а, понял. Если был включен поворот (стрелка), а в данный момент повороты не горят, запускается таймер.
+				TIMSK|=_BV(TOIE1);// If the turn signal (arrow) was switched on, and at the moment the turn signals are not lit, the timer is started.
     1e4e:	89 b7       	in	r24, 0x39	; 57
     1e50:	84 60       	ori	r24, 0x04	; 4
     1e52:	89 bf       	out	0x39, r24	; 57
-				//Это нужно, чтобы понять, это интервал между миганием поворотников, или сигнал поворота уже выключен.
+				//This is to see if this is the interval between the blinking of the turn signals, or if the turn signal is already off.
 			}
 			
 			if (signalCounter>300)
@@ -2554,7 +2554,7 @@ void presets (void){
     20a6:	ff 92       	push	r15
 
 
-C = WEEL_D * pi/magnets;					//длина окружности между магнитами
+C = WEEL_D * pi/magnets;					//circumferential length between the magnets
     20a8:	2b ed       	ldi	r18, 0xDB	; 219
     20aa:	3f e0       	ldi	r19, 0x0F	; 15
     20ac:	49 e4       	ldi	r20, 0x49	; 73
@@ -2580,7 +2580,7 @@ C = WEEL_D * pi/magnets;					//длина окружности между магнитами
     20e6:	70 93 17 01 	sts	0x0117, r23
     20ea:	80 93 18 01 	sts	0x0118, r24
     20ee:	90 93 19 01 	sts	0x0119, r25
-T = 1.0/(F_CPU/PRESCALER);//период отсчета времени в секундах (16 мкс) (prsc=256)
+T = 1.0/(F_CPU/PRESCALER);//counter tic time interval in seconds (16 us) (prsc=256)
     20f2:	8d eb       	ldi	r24, 0xBD	; 189
     20f4:	97 e3       	ldi	r25, 0x37	; 55
     20f6:	a6 e8       	ldi	r26, 0x86	; 134
@@ -2610,33 +2610,33 @@ PORTA|=_BV(3);//ENABLE 1 high (disabled)
 PORTA|=_BV(0);//ENABLE 2 high (disabled)
     2118:	d8 9a       	sbi	0x1b, 0	; 27
 
-PORTB|=_BV(5);//внутренняя подтяжка для внешних кнопок
+PORTB|=_BV(5);//internal pull-up for external buttons
     211a:	c5 9a       	sbi	0x18, 5	; 24
 PORTB|=_BV(6);
     211c:	c6 9a       	sbi	0x18, 6	; 24
 PORTB|=_BV(7);
     211e:	c7 9a       	sbi	0x18, 7	; 24
 	
-		//=======================АЦП
+		//=======================ADC
 		ADCSRA |= _BV(ADEN);
     2120:	37 9a       	sbi	0x06, 7	; 6
 		//=======================
 		ADCSRA |= _BV(ADPS0);		//
     2122:	30 9a       	sbi	0x06, 0	; 6
-		ADCSRA |= _BV(ADPS1);		// Прескейлер 128
+		ADCSRA |= _BV(ADPS1);		// Prescaler 128
     2124:	31 9a       	sbi	0x06, 1	; 6
 		ADCSRA |= _BV(ADPS2);		//
     2126:	32 9a       	sbi	0x06, 2	; 6
 		//=======================
 	
-	//инициализация дисплея
+	//display initialization
 	GLCD_Setup();
     2128:	0e 94 f1 11 	call	0x23e2	; 0x23e2 <GLCD_Setup>
 	GLCD_Clear();	
     212c:	0e 94 0e 16 	call	0x2c1c	; 0x2c1c <GLCD_Clear>
 	GLCD_Render();
     2130:	0e 94 b2 11 	call	0x2364	; 0x2364 <GLCD_Render>
-	//================= чтение сохраненных в EEPROM данных
+	//================= reading data from EEPROM
 	
 	
 	
@@ -2647,8 +2647,8 @@ PORTB|=_BV(7);
     2138:	0e 94 43 10 	call	0x2086	; 0x2086 <eeprom_read_byte>
     213c:	88 23       	and	r24, r24
     213e:	69 f1       	breq	.+90     	; 0x219a <presets+0x102>
-		//====общее количество оборотов, 4 байта
-		//eeprom_write_byte(20, 0);
+		//====total rotations of the wheel, 3 bytes
+		
 		eeprom_write_byte(21, 1);
     2140:	61 e0       	ldi	r22, 0x01	; 1
     2142:	85 e1       	ldi	r24, 0x15	; 21
@@ -2659,12 +2659,12 @@ PORTB|=_BV(7);
     214c:	86 e1       	ldi	r24, 0x16	; 22
     214e:	90 e0       	ldi	r25, 0x00	; 0
     2150:	0e 94 5a 0f 	call	0x1eb4	; 0x1eb4 <eeprom_write_byte>
-		eeprom_write_byte(23, 204);//117964
+		eeprom_write_byte(23, 204);
     2154:	6c ec       	ldi	r22, 0xCC	; 204
     2156:	87 e1       	ldi	r24, 0x17	; 23
     2158:	90 e0       	ldi	r25, 0x00	; 0
     215a:	0e 94 5a 0f 	call	0x1eb4	; 0x1eb4 <eeprom_write_byte>
-		//====заполнение ШИМ подсветки стрелки
+		//====Arrow illumination PWM
 		eeprom_write_byte(30, 255);
     215e:	6f ef       	ldi	r22, 0xFF	; 255
     2160:	8e e1       	ldi	r24, 0x1E	; 30
@@ -2675,7 +2675,7 @@ PORTB|=_BV(7);
     216a:	8f e1       	ldi	r24, 0x1F	; 31
     216c:	90 e0       	ldi	r25, 0x00	; 0
     216e:	0e 94 5a 0f 	call	0x1eb4	; 0x1eb4 <eeprom_write_byte>
-		//====заполнение ШИМ подсветки циферблата
+		//====Dial illumination PWM
 		eeprom_write_byte(32, 0);
     2172:	60 e0       	ldi	r22, 0x00	; 0
     2174:	80 e2       	ldi	r24, 0x20	; 32
@@ -2686,7 +2686,7 @@ PORTB|=_BV(7);
     217e:	81 e2       	ldi	r24, 0x21	; 33
     2180:	90 e0       	ldi	r25, 0x00	; 0
     2182:	0e 94 5a 0f 	call	0x1eb4	; 0x1eb4 <eeprom_write_byte>
-		//====контраст дисплея
+		//====Display contrast
 		eeprom_write_byte(34, 255);
     2186:	6f ef       	ldi	r22, 0xFF	; 255
     2188:	82 e2       	ldi	r24, 0x22	; 34
@@ -2701,8 +2701,7 @@ PORTB|=_BV(7);
 	}
 	
 	//==================
-	//unsigned long a = eeprom_read_byte(20);
-	//a=(a<<24);
+	
 	unsigned long b = eeprom_read_byte(21);
     219a:	85 e1       	ldi	r24, 0x15	; 21
     219c:	90 e0       	ldi	r25, 0x00	; 0
@@ -2725,10 +2724,10 @@ PORTB|=_BV(7);
     21ba:	87 e1       	ldi	r24, 0x17	; 23
     21bc:	90 e0       	ldi	r25, 0x00	; 0
     21be:	0e 94 43 10 	call	0x2086	; 0x2086 <eeprom_read_byte>
+	}
 	
 	//==================
-	//unsigned long a = eeprom_read_byte(20);
-	//a=(a<<24);
+	
 	unsigned long b = eeprom_read_byte(21);
 	b=(b<<16);
     21c2:	54 01       	movw	r10, r8
@@ -2742,7 +2741,7 @@ PORTB|=_BV(7);
     21ce:	cc 24       	eor	r12, r12
 	unsigned long d = eeprom_read_byte(23);
 	
-	total_rotations=b+c+d;  //a+
+	total_rotations=b+c+d;  
     21d0:	c8 0c       	add	r12, r8
     21d2:	d9 1c       	adc	r13, r9
     21d4:	ea 1c       	adc	r14, r10
@@ -2755,11 +2754,6 @@ PORTB|=_BV(7);
     21e4:	d0 92 1f 01 	sts	0x011F, r13
     21e8:	e0 92 20 01 	sts	0x0120, r14
     21ec:	f0 92 21 01 	sts	0x0121, r15
-	b=(b<<8);
-	c=eeprom_read_byte(33);
-	
-	PWM_digits = b+c;
-	*/
 	contrast= eeprom_read_byte(34);
     21f0:	82 e2       	ldi	r24, 0x22	; 34
     21f2:	90 e0       	ldi	r25, 0x00	; 0
@@ -2790,11 +2784,11 @@ arrow_calibration();
 
 
 
-MCUCR|= _BV(ISC11); // Внешнее прерывание по падающему фронту на INT1
+MCUCR|= _BV(ISC11); // External falling edge interrupt INT1
     2220:	85 b7       	in	r24, 0x35	; 53
     2222:	88 60       	ori	r24, 0x08	; 8
     2224:	85 bf       	out	0x35, r24	; 53
-GICR|=_BV(INT1); // Разрешение внешнего прерывания на INT1
+GICR|=_BV(INT1); // External Interrupt Enable INT1
     2226:	8b b7       	in	r24, 0x3b	; 59
     2228:	80 68       	ori	r24, 0x80	; 128
     222a:	8b bf       	out	0x3b, r24	; 59
@@ -2813,9 +2807,6 @@ OCR2=TIC;
 sei();
     2236:	78 94       	sei
 
-
-	
-//	total_rotations=0;
 
 }
     2238:	ff 90       	pop	r15

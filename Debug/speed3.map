@@ -1011,11 +1011,11 @@ LOAD c:/program files (x86)/atmel/atmel toolchain/avr8 gcc/native/3.4.2.1002/avr
  .debug_abbrev  0x0000034c      0x3ad SSD1306.o
  .debug_abbrev  0x000006f9      0x143 TWI.o
 
-.debug_line     0x00000000     0x1165
+.debug_line     0x00000000     0x1163
  *(.debug_line)
- .debug_line    0x00000000      0x5ef speed3.o
- .debug_line    0x000005ef      0x948 SSD1306.o
- .debug_line    0x00000f37      0x22e TWI.o
+ .debug_line    0x00000000      0x5ed speed3.o
+ .debug_line    0x000005ed      0x948 SSD1306.o
+ .debug_line    0x00000f35      0x22e TWI.o
 
 .debug_frame    0x00000000      0xb80
  *(.debug_frame)
