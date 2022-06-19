@@ -8,10 +8,11 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <avr/interrupt.h>
+#include <avr/eeprom.h>
 volatile int speedTimer = 0;
 volatile int speedTimerRecent = 0;
 volatile char speedRefresh = 1;			//speedometer value refresh flag
-volatile unsigned long totalRotations = 0;	//rotation counter
+volatile uint32_t totalRotations = 0;	//rotation counter
 double timePerTic = 0;		// duration of Counter1 tic in seconds		
 double circLength = 0;//wheel circumference
 volatile double speedKmh = 0;			//speed km/h
@@ -20,15 +21,16 @@ int newSteps = 0;
 uint8_t signalOn = 0;//if turn or hazard lights on, = 1
 uint8_t firstMeasure = 0;
 
-uint8_t lcdContrast = 255;
+uint8_t lcdContrast = 250;
 uint8_t magnets = 6; //number of magnets on the wheel
-double ratio = 1; //gear ratio (needed if magnets are not on the wheel)
+double ratio = 1.0; //gear ratio (needed if magnets are not on the wheel)
 double wheelDiameter = 0.70;			//wheel diameter in meters
-unsigned int pwmArrow = 1024;// of 1024
-unsigned int pwmDial = 1024;// of 1024
 double degreesPerKmh = 1.275;	//degrees per km/h
+uint16_t pwmArrow = 1024;// of 1024
+uint16_t pwmDial = 1024;// of 1024
+
 uint8_t scaleMax	= 190;		//speed max value
-uint8_t shutDownVoltageX10 = 80; //if voltage is below this value totalRotations is beeng saved to EEPROM
+uint8_t shutDownVoltageX10 = 80; //if voltage is below this value totalRotations is being saved to EEPROM
 uint8_t stepInterval = 150; //interval between steps (Affects Stepper Motor Rotation Speed)
 uint8_t smSteps =	96;		//stepper motor steps
 
@@ -36,43 +38,6 @@ unsigned int signalCounter = 0;//counter of turn lights interval
 unsigned long distance = 0;
 unsigned long newDistance = 0;
 double kmhPerStep = 0;
-
-//uint8_t debug1 = 0;
-//uint8_t debug2 = 0;
-//uint8_t debug3 = 0;
-
-
-#define pi 3.141592653		//pi
-#define PRESCALER 256
-#define TIC  20			//amount of Timer2 tics (F_CPU 16Mhz è presc=256 1 tic = 16 us). Defines the minimum period for counting time between Hall sensor triggering
-#define AREF 2.5			//reference voltage
-#define DEVIDER 6			//divider (for battery voltage measurement)
-
-
-
-
-#define FULL_STEP_ONE_PHASE 0
-#define HALF_STEP 1
-
-char stepMode = HALF_STEP;
-
-
-int read_ADC(unsigned char mux, unsigned char cycles);
-void step(char mode);
-void calculate_speed();
-void DrawArrow (char dir);
-void DrawSkull ();
-unsigned char eeprom_read_byte(unsigned int uiAddress);
-void eeprom_write_byte(unsigned int uiAddress, unsigned char ucData);
-void main_screen();
-void speed_arrow_update();
-void voltage_monitor();
-void signal_monitor();
-uint8_t button_monitor();
-void menu_screen();
-void arrow_calibration();
-
-
 volatile signed int phase = 0;
 uint8_t dir = 0;
 volatile int steps = 0;
@@ -80,8 +45,32 @@ char btnPressed = 0;
 int voltage = 0;
 int newVoltage = 0;
 
+#define pi 3.141592653		//pi
+#define PRESCALER 256		//prescaler for Timer2
+#define TIC  20				//amount of Timer2 tics (F_CPU 16Mhz è presc=256 1 tic = 16 us). Defines the minimum period for counting time between Hall sensor triggering
+#define AREF 2.5			//reference voltage
+#define DEVIDER 6			//divider (for battery voltage measurement)
 
 
+
+#define FULL_STEP_ONE_PHASE 0
+#define HALF_STEP 1
+
+uint8_t stepMode = HALF_STEP;
+
+
+int read_ADC(unsigned char mux, unsigned char cycles);
+void step(char mode);
+void calculate_speed();
+void DrawArrow (char dir);
+void DrawSkull ();
+void main_screen();
+void speed_arrow_update();
+void data_monitor();
+void signal_monitor();
+uint8_t button_monitor();
+void menu_screen();
+void arrow_calibration();
 
 const unsigned char phase_arr_full_step_1phase [] = {
 	0b00000111,
@@ -89,8 +78,6 @@ const unsigned char phase_arr_full_step_1phase [] = {
 	0b00000001,
 	0b00001000
 };								//ONE PHASE
-
-
 
 const unsigned char phase_arr_half_step [] = {
 	0b00000101,
@@ -102,9 +89,6 @@ const unsigned char phase_arr_half_step [] = {
 	0b00001000,
 	0b00000100			//HALF STEP
 };
-
-
-
 
 void presets (void){
 
@@ -132,53 +116,56 @@ PORTB|=_BV(7);
 		ADCSRA |= _BV(ADEN);
 		//=======================
 		ADCSRA |= _BV(ADPS0);		//
-		ADCSRA |= _BV(ADPS1);		// Prescaler 128
+		ADCSRA |= _BV(ADPS1);		// ADC prescaler 128
 		ADCSRA |= _BV(ADPS2);		//
 		//=======================
 	
-	//display initialization
-	GLCD_Setup();
-	GLCD_Clear();	
-	GLCD_Render();
+	
 	//================= reading data from EEPROM
 	
-	
-	
-	
-	if(eeprom_read_byte(10)){
-		//====total rotations of the wheel, 3 bytes
+	uint8_t firstEepRead;
+	uint16_t eepAddress = 8;
+	uint8_t eepAddrShift = 8;
+	firstEepRead = eeprom_read_byte((uint8_t*)eepAddress);//if the device is starting for the first time the default values have to be written to EEPROM
+	if (firstEepRead){
+		eeprom_write_byte((uint8_t*)eepAddress,0);
+	    eeprom_write_word((uint16_t*)(eepAddress+=eepAddrShift),pwmArrow);
+		eeprom_write_word((uint16_t*)(eepAddress+=eepAddrShift),pwmDial);
+		eeprom_write_byte((uint8_t*)(eepAddress+=eepAddrShift),scaleMax);
+		eeprom_write_byte((uint8_t*)(eepAddress+=eepAddrShift),shutDownVoltageX10);
+		eeprom_write_byte((uint8_t*)(eepAddress+=eepAddrShift),stepInterval);
+		eeprom_write_byte((uint8_t*)(eepAddress+=eepAddrShift),smSteps);
+		eeprom_write_byte((uint8_t*)(eepAddress+=eepAddrShift),lcdContrast);
+		eeprom_write_byte((uint8_t*)(eepAddress+=eepAddrShift),magnets);
+		eeprom_write_byte((uint8_t*)(eepAddress+=eepAddrShift),stepMode);
+		eeprom_write_float((float*)(eepAddress+=eepAddrShift),wheelDiameter);
+		eeprom_write_float((float*)(eepAddress+=eepAddrShift),ratio);
+		eeprom_write_float((float*)(eepAddress+=eepAddrShift),degreesPerKmh);
+		eeprom_write_dword((uint32_t*)(eepAddress+=eepAddrShift),totalRotations);
+		}
+		eepAddress = 8;
 		
-		eeprom_write_byte(21, 0);
-		eeprom_write_byte(22, 0);
-		eeprom_write_byte(23, 0);
-		//====Arrow illumination PWM
-		eeprom_write_byte(30, 255);
-		eeprom_write_byte(31, 200);
-		//====Dial illumination PWM
-		eeprom_write_byte(32, 0);
-		eeprom_write_byte(33, 50);
-		//====Display contrast
-		eeprom_write_byte(34, 255);
-		//====
-		eeprom_write_byte(10, 0);
-	}
+		pwmArrow = eeprom_read_word((uint16_t*)(eepAddress+=eepAddrShift));
+		pwmDial = eeprom_read_word((uint16_t*)(eepAddress+=eepAddrShift));
+		scaleMax = eeprom_read_byte((uint8_t*)(eepAddress+=eepAddrShift));
+		shutDownVoltageX10 = eeprom_read_byte((uint8_t*)(eepAddress+=eepAddrShift));
+		stepInterval = eeprom_read_byte((uint8_t*)(eepAddress+=eepAddrShift));
+		smSteps = eeprom_read_byte((uint8_t*)(eepAddress+=eepAddrShift));
+		lcdContrast = eeprom_read_byte((uint8_t*)(eepAddress+=eepAddrShift));
+		magnets = eeprom_read_byte((uint8_t*)(eepAddress+=eepAddrShift));
+		stepMode = eeprom_read_byte((uint8_t*)(eepAddress+=eepAddrShift));
+		wheelDiameter = eeprom_read_float((float*)(eepAddress+=eepAddrShift));
+		ratio = eeprom_read_float((float*)(eepAddress+=eepAddrShift));
+		degreesPerKmh = eeprom_read_float((float*)(eepAddress+=eepAddrShift));
+		totalRotations = eeprom_read_dword((uint32_t*)(eepAddress+=eepAddrShift));
 	
-	//==================
-	
-	unsigned long b = eeprom_read_byte(21);
-	b=(b<<16);
-	unsigned long c = eeprom_read_byte(22);
-	c=(c<<8);
-	unsigned long d = eeprom_read_byte(23);
-	
-	totalRotations = b+c+d;  
-	lcdContrast = eeprom_read_byte(34);
-	
+		
+
 	//dial and arrow light PWM===============
 	TCCR1A = _BV(WGM10)|_BV(WGM11)|_BV(COM1B1)|_BV(COM1A1);
 	TCCR1B = _BV(WGM12)|_BV(CS10)|_BV(CS11);
-	OCR1A= pwmArrow;
-	OCR1B= pwmDial;
+	OCR1A = pwmArrow;
+	OCR1B = pwmDial;
 	//============================
 	if (stepMode==FULL_STEP_ONE_PHASE){
 		kmhPerStep=(360.0/smSteps)/degreesPerKmh;
@@ -188,16 +175,17 @@ PORTB|=_BV(7);
 		}
 //arrow_calibration();
 
-
-
 MCUCR|= _BV(ISC11); // External falling edge interrupt INT1
 GICR|=_BV(INT1); // External Interrupt Enable INT1
 
 TCCR2|=_BV(CS21)|_BV(CS22)|_BV(WGM21);
-OCR2=TIC; //upper limit of Timer2
+OCR2 = TIC; //upper limit of Timer2
 
+//display initialization
+GLCD_Setup();
+GLCD_Clear();
 GLCD_SetContrast(lcdContrast);
-
+GLCD_Render();
 sei();
 }
 
@@ -247,12 +235,6 @@ void step(char mode){
 
 	PORTA = tempPort;
 	
-	/*
-	GLCD_Clear();
-	GLCD_GotoXY(0, 31);
-	GLCD_PrintInteger(steps);
-	GLCD_Render();
-	*/
 }
 
 
@@ -421,8 +403,6 @@ void main_screen()
 		GLCD_SetFont(Font5x8, 5, 8, GLCD_Overwrite);
 		GLCD_PrintDouble(voltage/10.0,10);
 		GLCD_PrintString("V");
-	GLCD_GotoXY(0, 16);
-		//GLCD_PrintInteger(total_rotations);
 		
 		
 	GLCD_SetFont(Arial_Narrow18x32, 18, 32, GLCD_Overwrite);
@@ -448,6 +428,11 @@ void main_screen()
 		}
 	GLCD_PrintDouble((double)distance/100.0,10);
 	
+	GLCD_SetFont(Font5x8, 5, 8, GLCD_Overwrite);
+	GLCD_GotoXY(64, 0);
+	GLCD_PrintDouble(speedKmh,10);
+	GLCD_Render();
+	
 	
 		GLCD_Render();	
 		}
@@ -460,7 +445,7 @@ int main(void)
 	presets();
 	
 	while(1){
-		voltage_monitor();
+		data_monitor();
 		calculate_speed();
 		speed_arrow_update();
 		signal_monitor();
@@ -480,6 +465,9 @@ void speed_arrow_update(){
 					TCCR0|=_BV(CS02)|_BV(CS00)|_BV(WGM01);
 					OCR0 = stepInterval;//interval between steps (Affects Stepper Motor Rotation Speed)
 					TIMSK|=_BV(OCIE0);
+				
+				main_screen();
+				
 				}
 				
 }
@@ -501,39 +489,27 @@ void calculate_speed(){
 			
 		if (speedKmh>scaleMax)speedKmh=scaleMax;
 		speedRefresh=0;
-														/*DEBUG info
-														GLCD_SetFont(Arial_Narrow18x32, 18, 32, GLCD_Overwrite);
-														GLCD_PrintDouble(speedKMH,10);
-														GLCD_SetFont(Font5x8, 5, 8, GLCD_Overwrite);
-														GLCD_GotoXY(64, 0);
-														GLCD_PrintInteger(steps);
-														GLCD_GotoXY(64, 10);
-														GLCD_PrintInteger(newSteps);
-														GLCD_Render();
-														*/
-														GLCD_SetFont(Font5x8, 5, 8, GLCD_Overwrite);
-														GLCD_GotoXY(64, 0);
-														GLCD_PrintDouble(speedKmh,10);
-														GLCD_Render();
+														
+														
 		}
 void signal_monitor(){
 		
 		if((!(PINB&_BV(4)))&&(PINB&_BV(3))){
 			DrawArrow(0);
-			signalOn=1;
-			signalCounter=0;
+			signalOn = 1;
+			signalCounter = 0;
 		}
 		
 		if((!(PINB&_BV(3)))&&(PINB&_BV(4))){
 			DrawArrow(1);
-			signalOn=1;
-			signalCounter=0;
+			signalOn = 1;
+			signalCounter = 0;
 		}
 		
 		if((!(PINB&_BV(4)))&&(!(PINB&_BV(3)))){
 			DrawSkull();
-			signalOn=1;
-			signalCounter=0;
+			signalOn = 1;
+			signalCounter = 0;
 		}
 		
 		
@@ -545,17 +521,17 @@ void signal_monitor(){
 				//This is to see if this is the interval between the blinking of the turn signals, or if the turn signal is already off.
 			}
 			
-			if (signalCounter>300) //if interval is longer then the interval between the blinks - stop displaying turn/hazard sign
+			if (signalCounter > 300) //if interval is longer then the interval between the blinks - stop displaying turn/hazard sign
 			{
-				signalOn=0;
-				signalCounter=0;
+				signalOn = 0;
+				signalCounter = 0;
 				TIMSK&=~_BV(TOIE1);
 				main_screen();
 			}
 		}
 		
 }
-void voltage_monitor(){
+void data_monitor(){
 
 	newVoltage = (read_ADC(4,10)/102.3)*AREF*DEVIDER;
 	
@@ -569,25 +545,7 @@ void voltage_monitor(){
 		PORTA|=_BV(2); //PHASE 1
 		PORTA|=_BV(1); //PHASE 2
 		
-		unsigned long x = 0;//saving odometer data to EEPROM
-		x = totalRotations;
-		x = (x<<24);
-		x = (x>>24);
-		//debug1=x;
-		eeprom_write_byte(23,x);
-		x = totalRotations;
-		x=(x<<16);
-		x=(x>>24);
-		//	debug2=x;
-		eeprom_write_byte(22,x);
-		x = totalRotations;
-		x=(x<<8);
-		x=(x>>24);
-		//	debug3=x;
-		eeprom_write_byte(21,x);
-		//x = total_rotations;
-		//x=x>>24;
-		//eeprom_write_byte(20,x);
+		eeprom_write_dword((uint32_t*)112,totalRotations);
 		
 		while (newVoltage<shutDownVoltageX10){
 			newVoltage = (read_ADC(4,10)/102.3)*AREF*DEVIDER;
@@ -596,14 +554,14 @@ void voltage_monitor(){
 	}
 	
 	
-	if (newVoltage!=voltage)
+	if (newVoltage!=voltage) //if voltage value changes - refresh data on the screen
 	{
 		voltage=newVoltage;
 		main_screen();
 	}
 	
 	newDistance=(round(totalRotations)*circLength)/10.0;
-	if (newDistance!=distance)
+	if (newDistance!=distance) //when the distance value changes by 100 meters - update the data on the screen
 	{
 		distance=newDistance;
 		main_screen();
@@ -723,39 +681,3 @@ int read_ADC(unsigned char mux, unsigned char cycles)
 	
 	
 	
-	void eeprom_write_byte(unsigned int uiAddress, unsigned char ucData)
-{
-/* 
-Wait for completion of previous write
- */
-while(EECR & (1<<EEWE))
-;
-/* Set up address and data registers */
-EEAR = uiAddress;
-EEDR = ucData;
-/* 
-Write logical one to EEMWE */
-cli();
-EECR |= (1<<EEMWE);
-/* Start eeprom write by setting EEWE */
-EECR |= (1<<EEWE);
-sei();
-}
-
-
-unsigned char eeprom_read_byte(unsigned int uiAddress)
-{
-	/* Wait for completion of previous write */
-	while(EECR & (1<<EEWE))
-	;
-	/* Set up address register */
-	cli();
-	EEAR = uiAddress;
-	/*
-	Start eeprom read by writing EERE */
-	EECR |= (1<<EERE);
-	sei();
-	/* Return data from data register */
-	return EEDR;
-}
-
