@@ -1,6 +1,5 @@
 #include "SSD1306.h"
 #include "Font5x8.h"
-#include "Font6x8.h"
 #include "Skull.h"
 #include "ArrowRight.h"
 #include "ArrowLeft.h"
@@ -9,21 +8,34 @@
 #include <stdlib.h>
 #include <avr/interrupt.h>
 #include <avr/eeprom.h>
+
+#define pi 3.141592653		//pi
+#define TIMER2_PRESCALER 256
+#define TIC  20				//amount of Timer2 tics (F_CPU 16Mhz è presc=256 1 tic = 16 us). Defines the minimum period for counting time between Hall sensor triggering
+#define AREF 2.5			//reference voltage
+#define DEVIDER 6			//divider (for battery voltage measurement)
+#define FULL_STEP 0
+#define HALF_STEP 1
+
 volatile int speedTimer = 0;
 volatile int speedTimerRecent = 0;
-volatile char speedRefresh = 1;			//speedometer value refresh flag
+volatile uint8_t speedRefresh = 1;			//speedometer value refresh flag
 volatile uint32_t totalRotations = 0;	//rotation counter
+volatile uint8_t arrowMoving = 0;
+volatile int8_t phase = 0;
+volatile int16_t steps = 0;
+
 double timePerTic = 0;		// duration of Counter1 tic in seconds		
 double circLength = 0;//wheel circumference
-volatile double speedKmh = 0;			//speed km/h
-volatile uint8_t arrowMoving = 0;
+double speedKmh = 0;			
+
 int newSteps = 0;
 uint8_t signalOn = 0;//if turn or hazard lights on, = 1
 uint8_t firstMeasure = 0;
-
+uint8_t arrowCalibrated = 0;
 uint8_t lcdContrast = 250;
-uint8_t magnets = 6; //number of magnets on the wheel
-double ratio = 1.0; //gear ratio (needed if magnets are not on the wheel)
+uint8_t magnetsOnWheel = 6; 
+double gearRatio = 1.0; //needed if magnets are not on the wheel
 double wheelDiameter = 0.70;			//wheel diameter in meters
 double degreesPerKmh = 1.275;	//degrees per km/h
 uint16_t pwmArrow = 1024;// of 1024
@@ -34,36 +46,23 @@ uint8_t shutDownVoltageX10 = 80; //if voltage is below this value totalRotations
 uint8_t stepInterval = 150; //interval between steps (Affects Stepper Motor Rotation Speed)
 uint8_t smSteps =	96;		//stepper motor steps
 
+uint8_t dir = 0;
 unsigned int signalCounter = 0;//counter of turn lights interval
 unsigned long distance = 0;
 unsigned long newDistance = 0;
 double kmhPerStep = 0;
-volatile signed int phase = 0;
-uint8_t dir = 0;
-volatile int steps = 0;
-char btnPressed = 0;
-int voltage = 0;
-int newVoltage = 0;
 
-#define pi 3.141592653		//pi
-#define PRESCALER 256		//prescaler for Timer2
-#define TIC  20				//amount of Timer2 tics (F_CPU 16Mhz è presc=256 1 tic = 16 us). Defines the minimum period for counting time between Hall sensor triggering
-#define AREF 2.5			//reference voltage
-#define DEVIDER 6			//divider (for battery voltage measurement)
-
-
-
-#define FULL_STEP_ONE_PHASE 0
-#define HALF_STEP 1
-
+uint8_t btnPressed = 0;
+int16_t voltage = 0;
+int16_t newVoltage = 0;
 uint8_t stepMode = HALF_STEP;
 
 
 int read_ADC(unsigned char mux, unsigned char cycles);
-void step(char mode);
+void step(uint8_t mode);
 void calculate_speed();
-void DrawArrow (char dir);
-void DrawSkull ();
+void draw_arrow (char arrowDir);
+void draw_skull ();
 void main_screen();
 void speed_arrow_update();
 void data_monitor();
@@ -72,14 +71,14 @@ uint8_t button_monitor();
 void menu_screen();
 void arrow_calibration();
 
-const unsigned char phase_arr_full_step_1phase [] = {
+const unsigned char phaseArrayFullStep [] = {
 	0b00000111,
 	0b00001110,
 	0b00000001,
 	0b00001000
 };								//ONE PHASE
 
-const unsigned char phase_arr_half_step [] = {
+const unsigned char phaseArrayHalfStep [] = {
 	0b00000101,
 	0b00000110,
 	0b00001010,
@@ -93,8 +92,8 @@ const unsigned char phase_arr_half_step [] = {
 void presets (void){
 
 
-circLength = wheelDiameter * pi/magnets;			//circumferential length between the magnets
-timePerTic = 1.0/(F_CPU/PRESCALER);			//counter tic time interval in seconds (16 us, presc=256)
+circLength = wheelDiameter * pi/magnetsOnWheel;			//circumferential length between the magnets
+timePerTic = 1.0/(F_CPU/TIMER2_PRESCALER);			//counter tic time interval in seconds (16 us, presc=256)
 
 	
 DDRA|=_BV(3); //ENABLE 1
@@ -136,10 +135,10 @@ PORTB|=_BV(7);
 		eeprom_write_byte((uint8_t*)(eepAddress+=eepAddrShift),stepInterval);
 		eeprom_write_byte((uint8_t*)(eepAddress+=eepAddrShift),smSteps);
 		eeprom_write_byte((uint8_t*)(eepAddress+=eepAddrShift),lcdContrast);
-		eeprom_write_byte((uint8_t*)(eepAddress+=eepAddrShift),magnets);
+		eeprom_write_byte((uint8_t*)(eepAddress+=eepAddrShift),magnetsOnWheel);
 		eeprom_write_byte((uint8_t*)(eepAddress+=eepAddrShift),stepMode);
 		eeprom_write_float((float*)(eepAddress+=eepAddrShift),wheelDiameter);
-		eeprom_write_float((float*)(eepAddress+=eepAddrShift),ratio);
+		eeprom_write_float((float*)(eepAddress+=eepAddrShift),gearRatio);
 		eeprom_write_float((float*)(eepAddress+=eepAddrShift),degreesPerKmh);
 		eeprom_write_dword((uint32_t*)(eepAddress+=eepAddrShift),totalRotations);
 		}
@@ -152,14 +151,16 @@ PORTB|=_BV(7);
 		stepInterval = eeprom_read_byte((uint8_t*)(eepAddress+=eepAddrShift));
 		smSteps = eeprom_read_byte((uint8_t*)(eepAddress+=eepAddrShift));
 		lcdContrast = eeprom_read_byte((uint8_t*)(eepAddress+=eepAddrShift));
-		magnets = eeprom_read_byte((uint8_t*)(eepAddress+=eepAddrShift));
+		magnetsOnWheel = eeprom_read_byte((uint8_t*)(eepAddress+=eepAddrShift));
 		stepMode = eeprom_read_byte((uint8_t*)(eepAddress+=eepAddrShift));
 		wheelDiameter = eeprom_read_float((float*)(eepAddress+=eepAddrShift));
-		ratio = eeprom_read_float((float*)(eepAddress+=eepAddrShift));
+		gearRatio = eeprom_read_float((float*)(eepAddress+=eepAddrShift));
 		degreesPerKmh = eeprom_read_float((float*)(eepAddress+=eepAddrShift));
 		totalRotations = eeprom_read_dword((uint32_t*)(eepAddress+=eepAddrShift));
 	
 		
+TCCR2|=_BV(CS21)|_BV(CS22)|_BV(WGM21);
+OCR2 = TIC; //upper limit of Timer2
 
 	//dial and arrow light PWM===============
 	TCCR1A = _BV(WGM10)|_BV(WGM11)|_BV(COM1B1)|_BV(COM1A1);
@@ -167,19 +168,14 @@ PORTB|=_BV(7);
 	OCR1A = pwmArrow;
 	OCR1B = pwmDial;
 	//============================
-	if (stepMode==FULL_STEP_ONE_PHASE){
+	if (stepMode==FULL_STEP){
 		kmhPerStep=(360.0/smSteps)/degreesPerKmh;
 		}
 	if (stepMode==HALF_STEP){
 		kmhPerStep=(180.0/smSteps)/degreesPerKmh;
 		}
-//arrow_calibration();
 
-MCUCR|= _BV(ISC11); // External falling edge interrupt INT1
-GICR|=_BV(INT1); // External Interrupt Enable INT1
 
-TCCR2|=_BV(CS21)|_BV(CS22)|_BV(WGM21);
-OCR2 = TIC; //upper limit of Timer2
 
 //display initialization
 GLCD_Setup();
@@ -187,6 +183,12 @@ GLCD_Clear();
 GLCD_SetContrast(lcdContrast);
 GLCD_Render();
 sei();
+if (!arrowCalibrated)arrow_calibration();
+MCUCR|= _BV(ISC11); // External falling edge interrupt INT1
+GICR|=_BV(INT1); // External Interrupt Enable INT1
+
+
+
 }
 
 ISR( TIMER0_COMP_vect ){
@@ -201,7 +203,7 @@ step(stepMode);
 }
 
 
-void step(char mode){
+void step(uint8_t mode){
 	char tempPort = 0;
 	signed int tempPhase = 0;
 	
@@ -215,7 +217,7 @@ void step(char mode){
 		phase--;
 		steps--;
 	}
-	if(mode == FULL_STEP_ONE_PHASE){
+	if(mode == FULL_STEP){
 		if (phase < 0) phase = 3;
 		if (phase > 3) phase = 0;
 	}
@@ -230,8 +232,8 @@ void step(char mode){
 	tempPort&=~_BV(1);
 	tempPort&=~_BV(2);
 	tempPort&=~_BV(3);
-	if(mode == FULL_STEP_ONE_PHASE) tempPort|=phase_arr_full_step_1phase[tempPhase];
-	if(mode == HALF_STEP) tempPort|=phase_arr_half_step[tempPhase];
+	if(mode == FULL_STEP) tempPort|=phaseArrayFullStep[tempPhase];
+	if(mode == HALF_STEP) tempPort|=phaseArrayHalfStep[tempPhase];
 
 	PORTA = tempPort;
 	
@@ -304,13 +306,13 @@ GLCD_GotoX(10);
 GLCD_GotoLine(4);
 GLCD_PrintString("Ratio");	
 GLCD_GotoX(offset);
-GLCD_PrintDouble(ratio,100);
+GLCD_PrintDouble(gearRatio,100);
 
 GLCD_GotoX(10);
 GLCD_GotoLine(5);
 GLCD_PrintString("Magnets");
 GLCD_GotoX(offset);
-GLCD_PrintInteger(magnets);
+GLCD_PrintInteger(magnetsOnWheel);
 
 GLCD_GotoX(10);
 GLCD_GotoLine(6);
@@ -455,7 +457,7 @@ int main(void)
 }
 
 void speed_arrow_update(){
-				if (stepMode == FULL_STEP_ONE_PHASE)	 newSteps = speedKmh/kmhPerStep;//(12,75 degrees per 10 km/h)
+				if (stepMode == FULL_STEP)	 newSteps = speedKmh/kmhPerStep;//(12,75 degrees per 10 km/h)
 				if (stepMode == HALF_STEP) newSteps = speedKmh/kmhPerStep;
 				int shiftSteps = steps - newSteps;//difference in speedometer readings (how much the arrow should be shifted)
 				if (shiftSteps > 0){dir = 0;}else {dir = 1;}
@@ -495,19 +497,19 @@ void calculate_speed(){
 void signal_monitor(){
 		
 		if((!(PINB&_BV(4)))&&(PINB&_BV(3))){
-			DrawArrow(0);
+			draw_arrow(0);
 			signalOn = 1;
 			signalCounter = 0;
 		}
 		
 		if((!(PINB&_BV(3)))&&(PINB&_BV(4))){
-			DrawArrow(1);
+			draw_arrow(1);
 			signalOn = 1;
 			signalCounter = 0;
 		}
 		
 		if((!(PINB&_BV(4)))&&(!(PINB&_BV(3)))){
-			DrawSkull();
+			draw_skull();
 			signalOn = 1;
 			signalCounter = 0;
 		}
@@ -556,7 +558,7 @@ void data_monitor(){
 	
 	if (newVoltage!=voltage) //if voltage value changes - refresh data on the screen
 	{
-		voltage=newVoltage;
+		voltage = newVoltage;
 		main_screen();
 	}
 	
@@ -599,52 +601,49 @@ return btnPressed;
 }
 void arrow_calibration(){
 	int calibrationSteps = 0;
-	if (stepMode==FULL_STEP_ONE_PHASE){
-		calibrationSteps=smSteps;
-	}
-	if (stepMode==HALF_STEP){
-		calibrationSteps=smSteps*2;
+	if (stepMode==FULL_STEP){
+		calibrationSteps = smSteps;
+	}else{
+		calibrationSteps = smSteps*2;
 	}
 
 
 steps = 0;
 phase = 0;
 	
-	newSteps = calibrationSteps/4; //turning arrow 90 clockwise
-	dir = 1;
+	newSteps = calibrationSteps/4; //moving arrow 90 degrees clockwise
 	
 	
+		dir = 1;
 		arrowMoving=1;
 		
 		TCCR0|=_BV(CS02)|_BV(CS00)|_BV(WGM01);
-		OCR0=stepInterval;
+		OCR0 = stepInterval;
 		TIMSK|=_BV(OCIE0);
 	
 
 while (arrowMoving);
 
-	_delay_ms(50);
-
-phase=0;
-newSteps=0;
-steps = calibrationSteps;	 //turning arrow 360 clockwise to be sure that arrow is in the zero position
-dir = 0;
-
-arrowMoving=1;
-
-TCCR0|=_BV(CS02)|_BV(CS00)|_BV(WGM01);
-OCR0 = stepInterval;
-TIMSK|=_BV(OCIE0);
+	_delay_ms(150);
+	steps = calibrationSteps;
+	newSteps = 0;  //moving arrow 360 degrees counterclockwise to make sure it is in zero position
+	
+	dir = 0;
+	arrowMoving = 1;
+	
+	
+	TCCR0|=_BV(CS02)|_BV(CS00)|_BV(WGM01);
+	OCR0 = stepInterval;
+	TIMSK|=_BV(OCIE0);
 
 while (arrowMoving);
-
 steps = 0;
 newSteps = 0;
-phase = 0;
+arrowCalibrated = 1;
 }
 	
-void DrawArrow (char dir){
-	if (dir){
+void draw_arrow (char arrowDir){
+	if (arrowDir){
 		GLCD_Clear();
 		GLCD_GotoXY(22, 7);
 		GLCD_DrawBitmap(arrowRight,92,55,GLCD_Black);
@@ -657,7 +656,7 @@ void DrawArrow (char dir){
 		}
 }
 
-void DrawSkull (void)
+void draw_skull (void)
 {
 GLCD_Clear();
 GLCD_GotoXY(21+6, 7);
