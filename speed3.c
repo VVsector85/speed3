@@ -11,11 +11,19 @@
 
 #define pi 3.141592653		//pi
 #define TIMER2_PRESCALER 256
-#define TIC  20				//amount of Timer2 tics (F_CPU 16Mhz è presc=256 1 tic = 16 us). Defines the minimum period for counting time between Hall sensor triggering
+#define TIC  20				//amount of Timer2 tics  (16Mhz è presc=256 1 tic = 16 us). Defines the minimum period for counting time between Hall sensor triggering
 #define AREF 2.5			//reference voltage
 #define DEVIDER 6			//divider (for battery voltage measurement)
 #define FULL_STEP 0
 #define HALF_STEP 1
+#define EEPROM_START_ADDRESS 8
+#define EEP_ODOMETER_START_ADDRESS 128
+#define EEPROM_ADDRESS_SHIFT 4
+#define EEP_WRITE 1
+#define EEP_READ 0
+#define EEP_ODOMETER_WRITE 3
+#define EEP_ODOMETER_READ 2
+#define ODOMETER_EEP_CELLS 50
 
 volatile int speedTimer = 0;
 volatile int speedTimerRecent = 0;
@@ -29,7 +37,7 @@ double timePerTic = 0;		// duration of Counter1 tic in seconds
 double circLength = 0;//wheel circumference
 double speedKmh = 0;			
 
-int newSteps = 0;
+uint16_t newSteps = 0;
 uint8_t signalOn = 0;//if turn or hazard lights on, = 1
 uint8_t firstMeasure = 0;
 uint8_t arrowCalibrated = 0;
@@ -44,7 +52,7 @@ uint16_t pwmDial = 1024;// of 1024
 uint8_t scaleMax	= 190;		//speed max value
 uint8_t shutDownVoltageX10 = 80; //if voltage is below this value totalRotations is being saved to EEPROM
 uint8_t stepInterval = 150; //interval between steps (Affects Stepper Motor Rotation Speed)
-uint8_t smSteps =	96;		//stepper motor steps
+uint16_t smSteps =	96;		//stepper motor steps
 
 uint8_t dir = 0;
 unsigned int signalCounter = 0;//counter of turn lights interval
@@ -56,12 +64,13 @@ uint8_t btnPressed = 0;
 int16_t voltage = 0;
 int16_t newVoltage = 0;
 uint8_t stepMode = HALF_STEP;
+uint8_t odometerAddress = 0;
+uint8_t odometerCurrentAddress;
 
-
-int read_ADC(unsigned char mux, unsigned char cycles);
+int read_ADC(uint8_t mux, uint8_t cycles);
 void step(uint8_t mode);
 void calculate_speed();
-void draw_arrow (char arrowDir);
+void draw_arrow (uint8_t arrowDir);
 void draw_skull ();
 void main_screen();
 void speed_arrow_update();
@@ -70,6 +79,7 @@ void signal_monitor();
 uint8_t button_monitor();
 void menu_screen();
 void arrow_calibration();
+void eep_operations (uint16_t eepStartAddress, uint8_t eepAddrShift, uint8_t writeOrRead);
 
 const unsigned char phaseArrayFullStep [] = {
 	0b00000111,
@@ -123,40 +133,17 @@ PORTB|=_BV(7);
 	//================= reading data from EEPROM
 	
 	uint8_t firstEepRead;
-	uint16_t eepAddress = 8;
-	uint8_t eepAddrShift = 8;
-	firstEepRead = eeprom_read_byte((uint8_t*)eepAddress);//if the device is starting for the first time the default values have to be written to EEPROM
+	
+	firstEepRead = eeprom_read_byte((uint8_t*)EEPROM_START_ADDRESS);//if the device is starting for the first time the default values have to be written to EEPROM
 	if (firstEepRead){
-		eeprom_write_byte((uint8_t*)eepAddress,0);
-	    eeprom_write_word((uint16_t*)(eepAddress+=eepAddrShift),pwmArrow);
-		eeprom_write_word((uint16_t*)(eepAddress+=eepAddrShift),pwmDial);
-		eeprom_write_byte((uint8_t*)(eepAddress+=eepAddrShift),scaleMax);
-		eeprom_write_byte((uint8_t*)(eepAddress+=eepAddrShift),shutDownVoltageX10);
-		eeprom_write_byte((uint8_t*)(eepAddress+=eepAddrShift),stepInterval);
-		eeprom_write_byte((uint8_t*)(eepAddress+=eepAddrShift),smSteps);
-		eeprom_write_byte((uint8_t*)(eepAddress+=eepAddrShift),lcdContrast);
-		eeprom_write_byte((uint8_t*)(eepAddress+=eepAddrShift),magnetsOnWheel);
-		eeprom_write_byte((uint8_t*)(eepAddress+=eepAddrShift),stepMode);
-		eeprom_write_float((float*)(eepAddress+=eepAddrShift),wheelDiameter);
-		eeprom_write_float((float*)(eepAddress+=eepAddrShift),gearRatio);
-		eeprom_write_float((float*)(eepAddress+=eepAddrShift),degreesPerKmh);
-		eeprom_write_dword((uint32_t*)(eepAddress+=eepAddrShift),totalRotations);
+		eep_operations(EEPROM_START_ADDRESS,EEPROM_ADDRESS_SHIFT,EEP_WRITE);
+			for (uint8_t i = 0;i<=ODOMETER_EEP_CELLS;i++){
+			eep_operations(EEP_ODOMETER_START_ADDRESS,EEPROM_ADDRESS_SHIFT,EEP_ODOMETER_WRITE);
+			}
 		}
-		eepAddress = 8;
+	eep_operations(EEPROM_START_ADDRESS,EEPROM_ADDRESS_SHIFT,EEP_READ);
+	eep_operations(EEP_ODOMETER_START_ADDRESS,EEPROM_ADDRESS_SHIFT,EEP_ODOMETER_READ);	
 		
-		pwmArrow = eeprom_read_word((uint16_t*)(eepAddress+=eepAddrShift));
-		pwmDial = eeprom_read_word((uint16_t*)(eepAddress+=eepAddrShift));
-		scaleMax = eeprom_read_byte((uint8_t*)(eepAddress+=eepAddrShift));
-		shutDownVoltageX10 = eeprom_read_byte((uint8_t*)(eepAddress+=eepAddrShift));
-		stepInterval = eeprom_read_byte((uint8_t*)(eepAddress+=eepAddrShift));
-		smSteps = eeprom_read_byte((uint8_t*)(eepAddress+=eepAddrShift));
-		lcdContrast = eeprom_read_byte((uint8_t*)(eepAddress+=eepAddrShift));
-		magnetsOnWheel = eeprom_read_byte((uint8_t*)(eepAddress+=eepAddrShift));
-		stepMode = eeprom_read_byte((uint8_t*)(eepAddress+=eepAddrShift));
-		wheelDiameter = eeprom_read_float((float*)(eepAddress+=eepAddrShift));
-		gearRatio = eeprom_read_float((float*)(eepAddress+=eepAddrShift));
-		degreesPerKmh = eeprom_read_float((float*)(eepAddress+=eepAddrShift));
-		totalRotations = eeprom_read_dword((uint32_t*)(eepAddress+=eepAddrShift));
 	
 		
 TCCR2|=_BV(CS21)|_BV(CS22)|_BV(WGM21);
@@ -183,7 +170,7 @@ GLCD_Clear();
 GLCD_SetContrast(lcdContrast);
 GLCD_Render();
 sei();
-if (!arrowCalibrated)arrow_calibration();
+//if (!arrowCalibrated)arrow_calibration();
 MCUCR|= _BV(ISC11); // External falling edge interrupt INT1
 GICR|=_BV(INT1); // External Interrupt Enable INT1
 
@@ -248,22 +235,26 @@ ISR (TIMER1_OVF_vect){
 }
 ISR(INT1_vect){
 //interrupt occurs when Hall sensor is triggered
-if (firstMeasure==0)
+if (firstMeasure)
+	{
+		speedTimerRecent = (speedTimer*TIC)+TCNT2;
+		TCNT2 = 0;
+		speedTimer = 0;
+		speedRefresh = 1;
+		totalRotations++;
+	}
+else
 	{
 		TIMSK|=_BV(OCIE2);
 		TCNT2 = 0;
 		firstMeasure = 1;
 		//first triggering of the sensor starts TIMER2
-	}
-else
-	{
-		speedTimerRecent = (speedTimer*TIC)+TCNT2;
-		TCNT2 = 0;	
-		speedTimer = 0;
-		speedRefresh = 1;
-		totalRotations++;
+		
+		
 	}
 }
+
+
 
 void menu_screen(){
 uint8_t offset = 75;	
@@ -477,20 +468,24 @@ void speed_arrow_update(){
 void calculate_speed(){
  
 			if(speedTimer>1000){
+						//if(speedRefresh)
+						eep_operations(EEP_ODOMETER_START_ADDRESS, EEPROM_ADDRESS_SHIFT,EEP_ODOMETER_WRITE);
 						TIMSK&=~_BV(OCIE2);  //if Hall sensor was not triggered for too long (0,32s) it means that vehicle does not move
 						TCNT2 = 0;
 						speedTimer = 0;
 						speedTimerRecent = 0;//speedTimer;//?
 						speedKmh = 0;
 						firstMeasure = 0;
+						
 						}
 			if((speedRefresh)&&(speedTimerRecent)){
-						if (speedTimerRecent>400) speedKmh = 1.0/(timePerTic*speedTimerRecent)*3.6*circLength;			
+						//if (speedTimerRecent>400) 
+						speedKmh = 1.0/(timePerTic*speedTimerRecent)*3.6*circLength;			
 						}
 		
 			
-		if (speedKmh>scaleMax)speedKmh=scaleMax;
-		speedRefresh=0;
+		if (speedKmh>scaleMax)speedKmh = scaleMax;
+		speedRefresh = 0;
 														
 														
 		}
@@ -537,7 +532,7 @@ void data_monitor(){
 
 	newVoltage = (read_ADC(4,10)/102.3)*AREF*DEVIDER;
 	
-	if (newVoltage<shutDownVoltageX10){  
+	/*if (newVoltage<shutDownVoltageX10){  
 		cli();
 		TCCR1A = 0;
 		TCCR1B = 0;
@@ -554,7 +549,7 @@ void data_monitor(){
 		}
 		main();
 	}
-	
+	*/
 	
 	if (newVoltage!=voltage) //if voltage value changes - refresh data on the screen
 	{
@@ -565,7 +560,7 @@ void data_monitor(){
 	newDistance=(round(totalRotations)*circLength)/10.0;
 	if (newDistance!=distance) //when the distance value changes by 100 meters - update the data on the screen
 	{
-		distance=newDistance;
+		distance = newDistance;
 		main_screen();
 	}
 }
@@ -586,14 +581,14 @@ if((!(PINB&_BV(5)))&&(!btnPressed)){
 if((!(PINB&_BV(6)))&&(!btnPressed)){
 	_delay_ms(50);
 	if(!(PINB&_BV(6))){
-	btnPressed=2;
+	btnPressed = 2;
 	}
 	
 }
 if((!(PINB&_BV(7)))&&(!btnPressed)){
 	_delay_ms(50);
 	if(!(PINB&_BV(7))){
-	btnPressed=3;
+	btnPressed = 3;
 	}
 	
 }
@@ -642,7 +637,7 @@ newSteps = 0;
 arrowCalibrated = 1;
 }
 	
-void draw_arrow (char arrowDir){
+void draw_arrow (uint8_t arrowDir){
 	if (arrowDir){
 		GLCD_Clear();
 		GLCD_GotoXY(22, 7);
@@ -665,7 +660,7 @@ GLCD_Render();
 }
 	
 	
-int read_ADC(unsigned char mux, unsigned char cycles)
+int read_ADC(uint8_t mux, uint8_t cycles)
 {
 	ADMUX = mux;
 	int tmp = 0;
@@ -679,4 +674,56 @@ int read_ADC(unsigned char mux, unsigned char cycles)
 }	
 	
 	
-	
+	void eep_operations (uint16_t eepStartAddress, uint8_t eepAddrShift, uint8_t eepAction){
+		
+		if (eepAction==EEP_WRITE){
+			eeprom_write_byte((uint8_t*)eepStartAddress,0);
+			eeprom_write_word((uint16_t*)(eepStartAddress+=eepAddrShift),pwmArrow);
+			eeprom_write_word((uint16_t*)(eepStartAddress+=eepAddrShift),pwmDial);
+			eeprom_write_byte((uint8_t*)(eepStartAddress+=eepAddrShift),scaleMax);
+			eeprom_write_byte((uint8_t*)(eepStartAddress+=eepAddrShift),shutDownVoltageX10);
+			eeprom_write_byte((uint8_t*)(eepStartAddress+=eepAddrShift),stepInterval);
+			eeprom_write_word((uint16_t*)(eepStartAddress+=eepAddrShift),smSteps);
+			eeprom_write_byte((uint8_t*)(eepStartAddress+=eepAddrShift),lcdContrast);
+			eeprom_write_byte((uint8_t*)(eepStartAddress+=eepAddrShift),magnetsOnWheel);
+			eeprom_write_byte((uint8_t*)(eepStartAddress+=eepAddrShift),stepMode);
+			eeprom_write_float((float*)(eepStartAddress+=eepAddrShift),wheelDiameter);
+			eeprom_write_float((float*)(eepStartAddress+=eepAddrShift),gearRatio);
+			eeprom_write_float((float*)(eepStartAddress+=eepAddrShift),degreesPerKmh);
+			
+			}
+			if(eepAction==EEP_READ){
+			pwmArrow = eeprom_read_word((uint16_t*)(eepStartAddress+=eepAddrShift));
+			pwmDial = eeprom_read_word((uint16_t*)(eepStartAddress+=eepAddrShift));
+			scaleMax = eeprom_read_byte((uint8_t*)(eepStartAddress+=eepAddrShift));
+			shutDownVoltageX10 = eeprom_read_byte((uint8_t*)(eepStartAddress+=eepAddrShift));
+			stepInterval = eeprom_read_byte((uint8_t*)(eepStartAddress+=eepAddrShift));
+			smSteps = eeprom_read_word((uint16_t*)(eepStartAddress+=eepAddrShift));
+			lcdContrast = eeprom_read_byte((uint8_t*)(eepStartAddress+=eepAddrShift));
+			magnetsOnWheel = eeprom_read_byte((uint8_t*)(eepStartAddress+=eepAddrShift));
+			stepMode = eeprom_read_byte((uint8_t*)(eepStartAddress+=eepAddrShift));
+			wheelDiameter = eeprom_read_float((float*)(eepStartAddress+=eepAddrShift));
+			gearRatio = eeprom_read_float((float*)(eepStartAddress+=eepAddrShift));
+			degreesPerKmh = eeprom_read_float((float*)(eepStartAddress+=eepAddrShift));
+			//totalRotations = eeprom_read_dword((uint32_t*)(eepStartAddress+=eepAddrShift));
+		}
+		if (eepAction==EEP_ODOMETER_READ){
+			uint32_t tempTotalR = 0;
+			
+			for (uint8_t i = 0;i<=ODOMETER_EEP_CELLS;i++){
+			tempTotalR = eeprom_read_dword((uint32_t*)(eepStartAddress+(eepAddrShift*i)));
+			if(tempTotalR>totalRotations)totalRotations = tempTotalR;
+			} 
+		}
+		if (eepAction==EEP_ODOMETER_WRITE){
+			
+			eeprom_write_dword((uint32_t*)(eepStartAddress+(odometerCurrentAddress*eepAddrShift)),totalRotations);
+			odometerCurrentAddress++;
+			if (odometerCurrentAddress>100)odometerCurrentAddress = 0;
+		}
+		
+		
+		
+		
+		
+	}
