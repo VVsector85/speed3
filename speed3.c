@@ -55,17 +55,16 @@ uint8_t stepInterval = 150; //interval between steps (Affects Stepper Motor Rota
 uint16_t smSteps =	96;		//stepper motor steps
 
 uint8_t dir = 0;
-unsigned int signalCounter = 0;//counter of turn lights interval
-unsigned long distance = 0;
-unsigned long newDistance = 0;
+uint16_t signalCounter = 0;//counter of turn lights interval
+uint32_t distance = 0;
+uint32_t newDistance = 0;
 double kmhPerStep = 0;
 
 uint8_t btnPressed = 0;
 int16_t voltage = 0;
 int16_t newVoltage = 0;
 uint8_t stepMode = HALF_STEP;
-uint8_t odometerAddress = 0;
-uint8_t odometerCurrentAddress;
+uint8_t odometerCurrentAddress = 0;
 
 int read_ADC(uint8_t mux, uint8_t cycles);
 void step(uint8_t mode);
@@ -170,21 +169,17 @@ GLCD_Clear();
 GLCD_SetContrast(lcdContrast);
 GLCD_Render();
 sei();
-//if (!arrowCalibrated)arrow_calibration();
+if (!arrowCalibrated)arrow_calibration();
 MCUCR|= _BV(ISC11); // External falling edge interrupt INT1
 GICR|=_BV(INT1); // External Interrupt Enable INT1
-
-
-
 }
 
 ISR( TIMER0_COMP_vect ){
-
-step(stepMode);		
+	step(stepMode);		
 	if (steps == newSteps){
 	arrowMoving = 0;
-	TCCR0=0;
-	OCR0=0;
+	TCCR0 = 0;
+	OCR0 = 0;
 	TIMSK&=~_BV(OCIE0);
 	}
 }
@@ -212,7 +207,7 @@ void step(uint8_t mode){
 		if (phase < 0) phase = 7;
 		if (phase > 7) phase = 0;
 	} 
-	tempPhase=phase;
+	tempPhase = phase;
 
 	tempPort=PORTA;
 	tempPort&=~_BV(0);
@@ -245,15 +240,12 @@ if (firstMeasure)
 	}
 else
 	{
+		//first triggering of the sensor starts TIMER2
 		TIMSK|=_BV(OCIE2);
 		TCNT2 = 0;
 		firstMeasure = 1;
-		//first triggering of the sensor starts TIMER2
-		
-		
 	}
 }
-
 
 
 void menu_screen(){
@@ -343,10 +335,7 @@ if (page==1){
 		GLCD_GotoLine(5);
 		GLCD_PrintString("Calibrate");
 		GLCD_GotoX(offset);
-		
 	
-
-
 }
 if (page==2){
 	GLCD_GotoX(10);
@@ -448,15 +437,15 @@ int main(void)
 }
 
 void speed_arrow_update(){
-				if (stepMode == FULL_STEP)	 newSteps = speedKmh/kmhPerStep;//(12,75 degrees per 10 km/h)
+				if (stepMode == FULL_STEP)	 newSteps = speedKmh/kmhPerStep;	//(12,75 degrees per 10 km/h)
 				if (stepMode == HALF_STEP) newSteps = speedKmh/kmhPerStep;
-				int shiftSteps = steps - newSteps;//difference in speedometer readings (how much the arrow should be shifted)
+				int shiftSteps = steps - newSteps;	//difference in speedometer readings (how much the arrow should be shifted)
 				if (shiftSteps > 0){dir = 0;}else {dir = 1;}
 				if (abs(shiftSteps)){
 					arrowMoving = 1;
 					
 					TCCR0|=_BV(CS02)|_BV(CS00)|_BV(WGM01);
-					OCR0 = stepInterval;//interval between steps (Affects Stepper Motor Rotation Speed)
+					OCR0 = stepInterval;	//interval between steps (Affects Stepper Motor Rotation Speed)
 					TIMSK|=_BV(OCIE0);
 				
 				main_screen();
@@ -470,24 +459,20 @@ void calculate_speed(){
 			if(speedTimer>1000){
 						//if(speedRefresh)
 						eep_operations(EEP_ODOMETER_START_ADDRESS, EEPROM_ADDRESS_SHIFT,EEP_ODOMETER_WRITE);
-						TIMSK&=~_BV(OCIE2);  //if Hall sensor was not triggered for too long (0,32s) it means that vehicle does not move
+						TIMSK&=~_BV(OCIE2);	//if Hall sensor was not triggered for too long (0,32s) it means that vehicle does not move
 						TCNT2 = 0;
 						speedTimer = 0;
-						speedTimerRecent = 0;//speedTimer;//?
+						speedTimerRecent = 0;	//speedTimer;//?
 						speedKmh = 0;
 						firstMeasure = 0;
 						
 						}
 			if((speedRefresh)&&(speedTimerRecent)){
-						//if (speedTimerRecent>400) 
 						speedKmh = 1.0/(timePerTic*speedTimerRecent)*3.6*circLength;			
 						}
 		
-			
 		if (speedKmh>scaleMax)speedKmh = scaleMax;
-		speedRefresh = 0;
-														
-														
+		speedRefresh = 0;									
 		}
 void signal_monitor(){
 		
@@ -514,11 +499,11 @@ void signal_monitor(){
 			if((PINB&_BV(3))&&(PINB&_BV(4))){
 				GLCD_Clear();
 				GLCD_Render();
-				TIMSK|=_BV(TOIE1);// If the turn signal (arrow) was switched on, and at the moment the turn signals are not lit, the timer is started.
-				//This is to see if this is the interval between the blinking of the turn signals, or if the turn signal is already off.
+				TIMSK|=_BV(TOIE1);	// If the turn signal (arrow) was switched on, and at the moment the turn signals are not lit, the timer is started.
+									//This is to see if this is the interval between the blinking of the turn signals, or if the turn signal is already off.
 			}
 			
-			if (signalCounter > 300) //if interval is longer then the interval between the blinks - stop displaying turn/hazard sign
+			if (signalCounter > 300)	//if interval is longer then the interval between the blinks - stop displaying turn/hazard sign
 			{
 				signalOn = 0;
 				signalCounter = 0;
@@ -532,33 +517,31 @@ void data_monitor(){
 
 	newVoltage = (read_ADC(4,10)/102.3)*AREF*DEVIDER;
 	
-	/*if (newVoltage<shutDownVoltageX10){  
+	if (newVoltage<shutDownVoltageX10){  
 		cli();
 		TCCR1A = 0;
 		TCCR1B = 0;
-											//shutting down all the power consumers
+				//shutting down all the power consumers
 		PORTA|=_BV(3); //ENABLE 1
 		PORTA|=_BV(0); //ENABLE 2
 		PORTA|=_BV(2); //PHASE 1
 		PORTA|=_BV(1); //PHASE 2
 		
-		eeprom_write_dword((uint32_t*)112,totalRotations);
-		
+		eeprom_write_byte((uint8_t*)60,odometerCurrentAddress);
 		while (newVoltage<shutDownVoltageX10){
 			newVoltage = (read_ADC(4,10)/102.3)*AREF*DEVIDER;
 		}
 		main();
 	}
-	*/
 	
-	if (newVoltage!=voltage) //if voltage value changes - refresh data on the screen
+	if (newVoltage!=voltage)	//if voltage value changes - refresh data on the screen
 	{
 		voltage = newVoltage;
 		main_screen();
 	}
 	
 	newDistance=(round(totalRotations)*circLength)/10.0;
-	if (newDistance!=distance) //when the distance value changes by 100 meters - update the data on the screen
+	if (newDistance!=distance)	//when the distance value changes by 100 meters - update the data on the screen
 	{
 		distance = newDistance;
 		main_screen();
@@ -606,9 +589,7 @@ void arrow_calibration(){
 steps = 0;
 phase = 0;
 	
-	newSteps = calibrationSteps/4; //moving arrow 90 degrees clockwise
-	
-	
+	newSteps = calibrationSteps/4;	//moving arrow 90 degrees clockwise
 		dir = 1;
 		arrowMoving=1;
 		
@@ -690,7 +671,7 @@ int read_ADC(uint8_t mux, uint8_t cycles)
 			eeprom_write_float((float*)(eepStartAddress+=eepAddrShift),wheelDiameter);
 			eeprom_write_float((float*)(eepStartAddress+=eepAddrShift),gearRatio);
 			eeprom_write_float((float*)(eepStartAddress+=eepAddrShift),degreesPerKmh);
-			
+			eeprom_write_byte((uint8_t*)(eepStartAddress+=eepAddrShift),odometerCurrentAddress);
 			}
 			if(eepAction==EEP_READ){
 			pwmArrow = eeprom_read_word((uint16_t*)(eepStartAddress+=eepAddrShift));
@@ -705,7 +686,7 @@ int read_ADC(uint8_t mux, uint8_t cycles)
 			wheelDiameter = eeprom_read_float((float*)(eepStartAddress+=eepAddrShift));
 			gearRatio = eeprom_read_float((float*)(eepStartAddress+=eepAddrShift));
 			degreesPerKmh = eeprom_read_float((float*)(eepStartAddress+=eepAddrShift));
-			//totalRotations = eeprom_read_dword((uint32_t*)(eepStartAddress+=eepAddrShift));
+			odometerCurrentAddress = eeprom_read_byte((uint8_t*)(eepStartAddress+=eepAddrShift));
 		}
 		if (eepAction==EEP_ODOMETER_READ){
 			uint32_t tempTotalR = 0;
@@ -721,9 +702,6 @@ int read_ADC(uint8_t mux, uint8_t cycles)
 			odometerCurrentAddress++;
 			if (odometerCurrentAddress>100)odometerCurrentAddress = 0;
 		}
-		
-		
-		
 		
 		
 	}
