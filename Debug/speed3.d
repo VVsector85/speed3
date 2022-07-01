@@ -17,8 +17,8 @@ speed3.d speed3.o: .././speed3.c .././SSD1306.h \
  c:\program\ files\ (x86)\atmel\studio\7.0\toolchain\avr8\avr8-gnu-toolchain\avr\include\avr\lock.h \
  c:\program\ files\ (x86)\atmel\studio\7.0\toolchain\avr8\avr8-gnu-toolchain\avr\include\avr\pgmspace.h \
  .././IO_Macros.h .././SSD1306_Settings.h .././TWI.h .././TWI_Settings.h \
- .././Font5x8.h .././Skull.h .././ArrowRight.h .././ArrowLeft.h \
- .././ArialNarrowDig18x32.h \
+ .././Skull.h .././ArrowRight.h .././ArrowLeft.h .././Font5x8.h \
+ .././ArialNarrowDig18x32.h .././ArialDig12x17.h \
  c:\program\ files\ (x86)\atmel\studio\7.0\toolchain\avr8\avr8-gnu-toolchain\avr\include\stdio.h \
  c:\program\ files\ (x86)\atmel\studio\7.0\toolchain\avr8\avr8-gnu-toolchain\lib\gcc\avr\5.4.0\include\stdarg.h \
  c:\program\ files\ (x86)\atmel\studio\7.0\toolchain\avr8\avr8-gnu-toolchain\avr\include\stdlib.h \
@@ -69,15 +69,17 @@ c:\program\ files\ (x86)\atmel\studio\7.0\toolchain\avr8\avr8-gnu-toolchain\avr\
 
 .././TWI_Settings.h:
 
-.././Font5x8.h:
-
 .././Skull.h:
 
 .././ArrowRight.h:
 
 .././ArrowLeft.h:
 
+.././Font5x8.h:
+
 .././ArialNarrowDig18x32.h:
+
+.././ArialDig12x17.h:
 
 c:\program\ files\ (x86)\atmel\studio\7.0\toolchain\avr8\avr8-gnu-toolchain\avr\include\stdio.h:
 

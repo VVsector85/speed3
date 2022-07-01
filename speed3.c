@@ -1,13 +1,15 @@
 #include "SSD1306.h"
-#include "Font5x8.h"
 #include "Skull.h"
 #include "ArrowRight.h"
 #include "ArrowLeft.h"
+#include "Font5x8.h"
 #include "ArialNarrowDig18x32.h"
+#include "ArialDig12x17.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <avr/interrupt.h>
 #include <avr/eeprom.h>
+
 
 #define pi 3.141592653		//pi
 #define TIMER2_PRESCALER 256
@@ -40,7 +42,7 @@ double speedKmh = 0;
 uint16_t newSteps = 0;
 uint8_t signalOn = 0;//if turn or hazard lights on, = 1
 uint8_t firstMeasure = 0;
-uint8_t arrowCalibrated = 0;
+//uint8_t arrowCalibrated = 0;
 uint8_t lcdContrast = 250;
 uint8_t magnetsOnWheel = 6; 
 double gearRatio = 1.0; //needed if magnets are not on the wheel
@@ -50,7 +52,7 @@ uint16_t pwmArrow = 1024;// of 1024
 uint16_t pwmDial = 1024;// of 1024
 
 uint8_t scaleMax	= 190;		//speed max value
-uint8_t shutDownVoltageX10 = 80; //if voltage is below this value totalRotations is being saved to EEPROM
+//uint8_t shutDownVoltageX10 = 80; //if voltage is below this value totalRotations is being saved to EEPROM
 uint8_t stepInterval = 150; //interval between steps (Affects Stepper Motor Rotation Speed)
 uint16_t smSteps =	96;		//stepper motor steps
 
@@ -60,7 +62,7 @@ uint32_t distance = 0;
 uint32_t newDistance = 0;
 double kmhPerStep = 0;
 
-uint8_t btnPressed = 0;
+
 int16_t voltage = 0;
 int16_t newVoltage = 0;
 uint8_t stepMode = HALF_STEP;
@@ -79,6 +81,8 @@ uint8_t button_monitor();
 void menu_screen();
 void arrow_calibration();
 void eep_operations (uint16_t eepStartAddress, uint8_t eepAddrShift, uint8_t writeOrRead);
+uint16_t set_value (uint16_t maxValue, uint16_t minValue, uint16_t currValue, uint8_t tens, const char *text);
+
 
 const unsigned char phaseArrayFullStep [] = {
 	0b00000111,
@@ -141,6 +145,7 @@ PORTB|=_BV(7);
 			}
 		}
 	eep_operations(EEPROM_START_ADDRESS,EEPROM_ADDRESS_SHIFT,EEP_READ);
+	if (odometerCurrentAddress>ODOMETER_EEP_CELLS)odometerCurrentAddress = 0;
 	eep_operations(EEP_ODOMETER_START_ADDRESS,EEPROM_ADDRESS_SHIFT,EEP_ODOMETER_READ);	
 		
 	
@@ -161,17 +166,16 @@ OCR2 = TIC; //upper limit of Timer2
 		kmhPerStep=(180.0/smSteps)/degreesPerKmh;
 		}
 
-
-
 //display initialization
 GLCD_Setup();
 GLCD_Clear();
 GLCD_SetContrast(lcdContrast);
 GLCD_Render();
 sei();
-if (!arrowCalibrated)arrow_calibration();
-MCUCR|= _BV(ISC11); // External falling edge interrupt INT1
-GICR|=_BV(INT1); // External Interrupt Enable INT1
+//if (!arrowCalibrated)
+//arrow_calibration();
+MCUCR|= _BV(ISC11); //External falling edge interrupt INT1
+GICR|=_BV(INT1); //External Interrupt Enable INT1
 }
 
 ISR( TIMER0_COMP_vect ){
@@ -232,7 +236,7 @@ ISR(INT1_vect){
 //interrupt occurs when Hall sensor is triggered
 if (firstMeasure)
 	{
-		speedTimerRecent = (speedTimer*TIC)+TCNT2;
+		speedTimerRecent = (speedTimer*TIC) + TCNT2;
 		TCNT2 = 0;
 		speedTimer = 0;
 		speedRefresh = 1;
@@ -252,6 +256,7 @@ void menu_screen(){
 uint8_t offset = 75;	
 static int8_t menuItem;
 static int8_t page;
+
 if (page < 0) page = 0;
 if (menuItem > 5){page++;menuItem=0;}
 if (menuItem < 0){page--;menuItem=5;}
@@ -260,16 +265,17 @@ if ((page == 2)&&(menuItem > 1)){
 	menuItem = 0;
 }
 GLCD_Clear();
-GLCD_FillRectangle(0,0+menuItem*8-1+8,5,7+menuItem*8+8,GLCD_Black);
-GLCD_FillRectangle(122,0+menuItem*8-1+8,127,7+menuItem*8+8,GLCD_Black);
-GLCD_DrawLine(0,menuItem*8-2+8,127,menuItem*8-2+8,GLCD_Black);
-GLCD_DrawLine(0,menuItem*8+8+8,127,menuItem*8+8+8,GLCD_Black);
+//GLCD_FillRectangle(0,0+menuItem*8-1+8,5,7+menuItem*8+8,GLCD_Black);
+//GLCD_FillRectangle(122,0+menuItem*8-1+8,127,7+menuItem*8+8,GLCD_Black);
+//GLCD_DrawLine(0,menuItem*8-2+8,127,menuItem*8-2+8,GLCD_Black);
+//GLCD_DrawLine(0,menuItem*8+8+8,127,menuItem*8+8+8,GLCD_Black);
+//GLCD_InvertRect(0,menuItem*8-2+8,127,menuItem*8-2+16);
 
 	GLCD_SetFont(Font5x8, 5, 8, GLCD_Merge);
 if(page==0){
 GLCD_GotoX(10);	
 GLCD_GotoLine(1);
-GLCD_PrintString("Dig_PWM");
+GLCD_PrintString("Dial_PWM");
 GLCD_GotoX(offset);
 GLCD_PrintInteger(pwmDial);
 
@@ -301,7 +307,7 @@ GLCD_GotoX(10);
 GLCD_GotoLine(6);
 GLCD_PrintString("Sdown V");
 GLCD_GotoX(offset);
-GLCD_PrintDouble(shutDownVoltageX10/10.0,10);
+//GLCD_PrintDouble(shutDownVoltageX10/10.0,10);
 
 }
 
@@ -347,12 +353,25 @@ if (page==2){
 	GLCD_PrintString("load defaults");
 }
 
+GLCD_InvertRect(0,menuItem*8-2+9,127,menuItem*8-2+17);
 GLCD_Render();
 
 
 while(1){
-		uint8_t currentButton=button_monitor();
+		uint8_t currentButton = button_monitor();
 		if(currentButton){
+			if ((currentButton == 1)&&(menuItem == 0)){
+				
+				pwmDial=set_value(12345,0,1234,2,"Dial PWM");
+				eep_operations(EEPROM_START_ADDRESS,EEPROM_ADDRESS_SHIFT,EEP_WRITE);
+// 				GLCD_Clear();
+// 				GLCD_GotoX(10);
+// 				GLCD_GotoY(10);
+// 				GLCD_PrintInteger(tempVar);
+// 				GLCD_Render();
+// 				_delay_ms(200);
+			}
+			
 			if(currentButton == 2)	menuItem++;
 					
 			if(currentButton == 3)	menuItem--;
@@ -389,20 +408,20 @@ void main_screen()
 		
 	GLCD_SetFont(Arial_Narrow18x32, 18, 32, GLCD_Overwrite);
 	GLCD_GotoXY(2+2, 31);
-		long tempDistance=0;
+		uint32_t tempDistance = 0;
 	
-		if (distance>99){tempDistance=distance/10;} else{tempDistance=100;}
-		uint8_t l=0;
+		if (distance>99){tempDistance = distance/10;} else{tempDistance = 100;}
+		uint8_t l = 0;
 		
 			while(tempDistance){
 			tempDistance/=10;
 			l++;
 			}
 	
-	int zeros = 6-l;
+	int8_t zeros = 6-l;
 	if (distance < 100)zeros = 4;
 		if (zeros > 0){
-			for (int i=0;i<zeros;i++){
+			for (int8_t i=0;i<zeros;i++){
 		
 				GLCD_PrintString("0");
 		
@@ -456,9 +475,11 @@ void speed_arrow_update(){
 
 void calculate_speed(){
  
-			if(speedTimer>1000){
+			if(speedTimer>400){
 						//if(speedRefresh)
+						cli();
 						eep_operations(EEP_ODOMETER_START_ADDRESS, EEPROM_ADDRESS_SHIFT,EEP_ODOMETER_WRITE);
+						sei();
 						TIMSK&=~_BV(OCIE2);	//if Hall sensor was not triggered for too long (0,32s) it means that vehicle does not move
 						TCNT2 = 0;
 						speedTimer = 0;
@@ -517,7 +538,7 @@ void data_monitor(){
 
 	newVoltage = (read_ADC(4,10)/102.3)*AREF*DEVIDER;
 	
-	if (newVoltage<shutDownVoltageX10){  
+/*	if (newVoltage<shutDownVoltageX10){  
 		cli();
 		TCCR1A = 0;
 		TCCR1B = 0;
@@ -532,9 +553,9 @@ void data_monitor(){
 			newVoltage = (read_ADC(4,10)/102.3)*AREF*DEVIDER;
 		}
 		main();
-	}
+	}*/
 	
-	if (newVoltage!=voltage)	//if voltage value changes - refresh data on the screen
+	if (newVoltage!=voltage)	//if voltage value changes - update data on the screen
 	{
 		voltage = newVoltage;
 		main_screen();
@@ -549,6 +570,7 @@ void data_monitor(){
 }
 
 uint8_t button_monitor(){
+	uint8_t btnPressed = 0;
 if ((PINB&_BV(5))&&(PINB&_BV(6))&&(PINB&_BV(7))){
 	btnPressed = 0;
 	return 0;
@@ -591,7 +613,7 @@ phase = 0;
 	
 	newSteps = calibrationSteps/4;	//moving arrow 90 degrees clockwise
 		dir = 1;
-		arrowMoving=1;
+		arrowMoving = 1;
 		
 		TCCR0|=_BV(CS02)|_BV(CS00)|_BV(WGM01);
 		OCR0 = stepInterval;
@@ -615,7 +637,7 @@ while (arrowMoving);
 while (arrowMoving);
 steps = 0;
 newSteps = 0;
-arrowCalibrated = 1;
+//arrowCalibrated = 1;
 }
 	
 void draw_arrow (uint8_t arrowDir){
@@ -662,7 +684,7 @@ int read_ADC(uint8_t mux, uint8_t cycles)
 			eeprom_write_word((uint16_t*)(eepStartAddress+=eepAddrShift),pwmArrow);
 			eeprom_write_word((uint16_t*)(eepStartAddress+=eepAddrShift),pwmDial);
 			eeprom_write_byte((uint8_t*)(eepStartAddress+=eepAddrShift),scaleMax);
-			eeprom_write_byte((uint8_t*)(eepStartAddress+=eepAddrShift),shutDownVoltageX10);
+			//eeprom_write_byte((uint8_t*)(eepStartAddress+=eepAddrShift),shutDownVoltageX10);
 			eeprom_write_byte((uint8_t*)(eepStartAddress+=eepAddrShift),stepInterval);
 			eeprom_write_word((uint16_t*)(eepStartAddress+=eepAddrShift),smSteps);
 			eeprom_write_byte((uint8_t*)(eepStartAddress+=eepAddrShift),lcdContrast);
@@ -671,13 +693,13 @@ int read_ADC(uint8_t mux, uint8_t cycles)
 			eeprom_write_float((float*)(eepStartAddress+=eepAddrShift),wheelDiameter);
 			eeprom_write_float((float*)(eepStartAddress+=eepAddrShift),gearRatio);
 			eeprom_write_float((float*)(eepStartAddress+=eepAddrShift),degreesPerKmh);
-			eeprom_write_byte((uint8_t*)(eepStartAddress+=eepAddrShift),odometerCurrentAddress);
+			//eeprom_write_byte((uint8_t*)(eepStartAddress+=eepAddrShift),odometerCurrentAddress);
 			}
 			if(eepAction==EEP_READ){
 			pwmArrow = eeprom_read_word((uint16_t*)(eepStartAddress+=eepAddrShift));
 			pwmDial = eeprom_read_word((uint16_t*)(eepStartAddress+=eepAddrShift));
 			scaleMax = eeprom_read_byte((uint8_t*)(eepStartAddress+=eepAddrShift));
-			shutDownVoltageX10 = eeprom_read_byte((uint8_t*)(eepStartAddress+=eepAddrShift));
+			//shutDownVoltageX10 = eeprom_read_byte((uint8_t*)(eepStartAddress+=eepAddrShift));
 			stepInterval = eeprom_read_byte((uint8_t*)(eepStartAddress+=eepAddrShift));
 			smSteps = eeprom_read_word((uint16_t*)(eepStartAddress+=eepAddrShift));
 			lcdContrast = eeprom_read_byte((uint8_t*)(eepStartAddress+=eepAddrShift));
@@ -686,22 +708,180 @@ int read_ADC(uint8_t mux, uint8_t cycles)
 			wheelDiameter = eeprom_read_float((float*)(eepStartAddress+=eepAddrShift));
 			gearRatio = eeprom_read_float((float*)(eepStartAddress+=eepAddrShift));
 			degreesPerKmh = eeprom_read_float((float*)(eepStartAddress+=eepAddrShift));
-			odometerCurrentAddress = eeprom_read_byte((uint8_t*)(eepStartAddress+=eepAddrShift));
+			//odometerCurrentAddress = eeprom_read_byte((uint8_t*)(eepStartAddress+=eepAddrShift));
 		}
 		if (eepAction==EEP_ODOMETER_READ){
-			uint32_t tempTotalR = 0;
+			uint32_t tempTotalRotations = 0;
 			
 			for (uint8_t i = 0;i<=ODOMETER_EEP_CELLS;i++){
-			tempTotalR = eeprom_read_dword((uint32_t*)(eepStartAddress+(eepAddrShift*i)));
-			if(tempTotalR>totalRotations)totalRotations = tempTotalR;
+			tempTotalRotations = eeprom_read_dword((uint32_t*)(eepStartAddress+(eepAddrShift*i)));
+			if(tempTotalRotations>totalRotations){
+				totalRotations = tempTotalRotations;
+				odometerCurrentAddress = i + 1;
+				}
 			} 
 		}
 		if (eepAction==EEP_ODOMETER_WRITE){
 			
 			eeprom_write_dword((uint32_t*)(eepStartAddress+(odometerCurrentAddress*eepAddrShift)),totalRotations);
 			odometerCurrentAddress++;
-			if (odometerCurrentAddress>100)odometerCurrentAddress = 0;
+			if (odometerCurrentAddress>ODOMETER_EEP_CELLS)odometerCurrentAddress = 0;
 		}
 		
+		
+	}
+	
+	uint16_t set_value (uint16_t maxValue, uint16_t minValue, uint16_t currValue, uint8_t tens, const char *text){
+		
+		GLCD_SetFont(Font5x8, 5, 8, GLCD_Overwrite);
+		GLCD_Clear();
+		GLCD_GotoLine(1);
+		GLCD_GotoX(10);
+		GLCD_PrintString(text);
+		GLCD_GotoY(8);
+		GLCD_GotoX(90);
+		GLCD_PrintString("Edit");
+		GLCD_GotoY(20);
+		GLCD_GotoX(90);
+		GLCD_PrintString("Back");
+		GLCD_GotoY(32);
+		GLCD_GotoX(90);
+		
+		GLCD_PrintString("Save");
+// 		GLCD_DrawRectangle(78,6,78+26,16,GLCD_Black);
+// 		GLCD_DrawRectangle(110,6,120,16,GLCD_Black);
+// 		GLCD_DrawLine(110,6,120,16,GLCD_Black);
+// 		GLCD_DrawLine(110,16,120,6,GLCD_Black);
+		GLCD_GotoY(55);
+		GLCD_GotoX(6);
+		GLCD_PrintString("min:");
+		GLCD_GotoX(70);
+		GLCD_PrintString("max:");
+		GLCD_GotoX(28);
+		if (tens){ 
+			uint8_t devider=1;
+			for (int8_t i=0;i<tens;i++){devider*=10;}
+			
+			GLCD_PrintDouble(maxValue/(float)devider,devider);
+			GLCD_GotoX(95);
+			GLCD_PrintDouble((float)minValue/(float)devider,devider);
+			}else{
+			GLCD_PrintInteger(maxValue);
+			GLCD_GotoX(95);
+			GLCD_PrintInteger(minValue);	
+			}
+		
+		GLCD_Render();
+		_delay_ms(200);
+		
+		GLCD_GotoY(24);
+		GLCD_GotoX(5);
+		GLCD_SetFont(Arial12x17, 12, 17, GLCD_Overwrite);
+		
+//
+
+    uint16_t tempValue;
+	uint16_t newValue = 0;
+	int8_t digitIndex;
+	uint8_t valueLength;
+	uint8_t maxValueLength;
+	int8_t *digitsArr;  
+	int8_t currentItem = 0;
+	tempValue = currValue;
+	valueLength = 0;
+	while(tempValue)       //finding the number of digits for current value 
+	   {
+		   tempValue = tempValue / 10;
+		   valueLength++;
+		        } 
+	tempValue = maxValue;
+	maxValueLength = 0;
+	while(tempValue)       //finding the number of digits for maximum value allowed
+		{
+			tempValue = tempValue / 10;
+			maxValueLength++;
+				}
+				
+		digitsArr = (int8_t*)malloc(maxValueLength * sizeof(int8_t));
+		
+		
+		for(digitIndex = 0;digitIndex<maxValueLength;digitIndex++){	//putting digits to array
+			if (digitIndex<valueLength){
+				digitsArr[digitIndex] = currValue % 10;
+				currValue = currValue / 10;
+			}else{
+				digitsArr[digitIndex] = 0;	//if current value is shorter then maximum value - set extra digits to zero
+			}
+		}
+			  
+
+		int8_t rectShift = (5+(maxValueLength-1)*13)-currentItem*13;
+		for(digitIndex = maxValueLength - 1;digitIndex>=0;digitIndex--){
+				GLCD_PrintInteger(digitsArr[digitIndex]);
+					if ((digitIndex==tens)&&(tens)){
+						GLCD_PrintString(".");
+					rectShift+=5;
+					}
+				}   
+				
+		
+		
+		GLCD_InvertRect(rectShift,24,rectShift+12,40);
+		GLCD_Render();
+		
+		while(1){
+			uint8_t currentButton = button_monitor();
+			if(currentButton){
+				rectShift = 0;
+					if (currentButton == 1) {
+						currentItem++;
+						if (currentItem==maxValueLength)currentItem=0;
+					
+					}
+			
+					if (currentButton == 3) {
+						digitsArr[currentItem]++;
+						if (digitsArr[currentItem]>9)digitsArr[currentItem]=0;
+					}
+					if (currentButton == 2) {
+						digitsArr[currentItem]--;
+						if (digitsArr[currentItem]<0)digitsArr[currentItem]=9;
+					}
+				while(button_monitor());
+			
+			GLCD_DrawRectangle(4,24,4,56,GLCD_White);
+			GLCD_GotoY(24);
+			GLCD_GotoX(5);
+			for(digitIndex = maxValueLength - 1;digitIndex>=0;digitIndex--){
+				GLCD_PrintInteger(digitsArr[digitIndex]);
+				if ((digitIndex==tens)&&(tens)) {GLCD_PrintString(".");}
+			}
+			
+			rectShift = (5+(maxValueLength-1)*13)-currentItem*13;
+			if (tens){
+					if(currentItem<tens){
+						rectShift+=5;
+					}
+				}
+			GLCD_InvertRect(rectShift,24,rectShift+12,40);
+			GLCD_Render();
+			}
+		
+		}
+		
+		
+		
+										//gathering digits back to the integer
+		for(digitIndex = maxValueLength - 1;digitIndex>=0;digitIndex--){
+			uint16_t tenPower = digitsArr[digitIndex];
+			for (uint8_t j = 0;j<digitIndex;j++){
+				tenPower*=10;
+			}
+			newValue += tenPower;
+		}
+		
+		//if(!((newValue<=maxValue)&&(newValue>=minValue))){newValue=currValue}//else{return currValue;}
+		
+		return newValue;
 		
 	}
