@@ -25,7 +25,7 @@
 #define EEP_READ 0
 #define EEP_ODOMETER_WRITE 3
 #define EEP_ODOMETER_READ 2
-#define ODOMETER_EEP_CELLS 50
+#define ODOMETER_EEP_CELLS 99  //+1 (counting from zero)
 #define BOUNCE_DELAY 1
 #define MAX_PERIOD 180	//MAX_PERIOD*TIC*16us speed is considered to be zero if delay between Hall sensor triggering is longer
 
@@ -273,12 +273,9 @@ else
 
 
 void menu_screen(){
-	
 uint8_t offset = 85;
 static int8_t menuItem;
 static int8_t page;
-
-
 if (menuItem > 5){page++;menuItem = 0;}
 if (menuItem < 0){page--;menuItem= 5;}
 if ((page == 2)&&(menuItem > 3)){
@@ -287,103 +284,98 @@ if ((page == 2)&&(menuItem > 3)){
 }
 if (page<0){page = 2;menuItem = 3;}
 GLCD_Clear();
-
-	GLCD_SetFont(Font5x8, 5, 8, GLCD_Merge);
+GLCD_SetFont(Font5x8, 5, 8, GLCD_Overwrite);
 if(page==0){
-//item 0
-GLCD_GotoX(10);
-GLCD_GotoLine(1);
-GLCD_PrintString("Dial PWM");
-GLCD_GotoX(offset);
-GLCD_PrintInteger(pwmDial);
-//item 1
-GLCD_GotoX(10);
-GLCD_GotoLine(2);
-GLCD_PrintString("Arrow PWM");
-GLCD_GotoX(offset);
-GLCD_PrintInteger(pwmArrow);
-//item 2
-GLCD_GotoX(10);
-GLCD_GotoLine(3);
-GLCD_PrintString("Wheel D");
-GLCD_GotoX(offset);
-GLCD_PrintDouble(wheelDiameter,1000);
-//item 3
-GLCD_GotoX(10);
-GLCD_GotoLine(4);
-GLCD_PrintString("Ratio");
-GLCD_GotoX(offset);
-GLCD_PrintDouble(gearRatio,1000);
-//item 4
-GLCD_GotoX(10);
-GLCD_GotoLine(5);
-GLCD_PrintString("Magnets");
-GLCD_GotoX(offset);
-GLCD_PrintInteger(magnetsOnWheel);
-//item 5
-GLCD_GotoX(10);
-GLCD_GotoLine(6);
-GLCD_PrintString("Step mode");
-GLCD_GotoX(offset);
-GLCD_PrintInteger(stepMode);
-
+	//item 0
+	GLCD_GotoX(10);
+	GLCD_GotoLine(1);
+	GLCD_PrintString("Dial PWM");
+	GLCD_GotoX(offset);
+	GLCD_PrintInteger(pwmDial);
+	//item 1
+	GLCD_GotoX(10);
+	GLCD_GotoLine(2);
+	GLCD_PrintString("Arrow PWM");
+	GLCD_GotoX(offset);
+	GLCD_PrintInteger(pwmArrow);
+	//item 2
+	GLCD_GotoX(10);
+	GLCD_GotoLine(3);
+	GLCD_PrintString("Wheel D");
+	GLCD_GotoX(offset);
+	GLCD_PrintDouble(wheelDiameter,1000);
+	//item 3
+	GLCD_GotoX(10);
+	GLCD_GotoLine(4);
+	GLCD_PrintString("Ratio");
+	GLCD_GotoX(offset);
+	GLCD_PrintDouble(gearRatio,1000);
+	//item 4
+	GLCD_GotoX(10);
+	GLCD_GotoLine(5);
+	GLCD_PrintString("Magnets");
+	GLCD_GotoX(offset);
+	GLCD_PrintInteger(magnetsOnWheel);
+	//item 5
+	GLCD_GotoX(10);
+	GLCD_GotoLine(6);
+	GLCD_PrintString("Step mode");
+	GLCD_GotoX(offset);
+	GLCD_PrintInteger(stepMode);
 }
 
 else if (page==1){
-//item 6
+	//item 6
 	GLCD_GotoX(10);
 	GLCD_GotoLine(1);
 	GLCD_PrintString("Max speed");
 	GLCD_GotoX(offset);
 	GLCD_PrintInteger(scaleMax);
-//item 7
+	//item 7
 	GLCD_GotoX(10);
 	GLCD_GotoLine(2);
 	GLCD_PrintString("Deg/kmh");
 	GLCD_GotoX(offset);
 	GLCD_PrintDouble(degreesPerKmh,1000);
-//item 8
+	//item 8
 	GLCD_GotoX(10);
 	GLCD_GotoLine(3);
 	GLCD_PrintString("SM steps");
 	GLCD_GotoX(offset);
 	GLCD_PrintInteger(smSteps);
-//item 9
+	//item 9
 	GLCD_GotoX(10);
 	GLCD_GotoLine(4);
 	GLCD_PrintString("Step inter.");
 	GLCD_GotoX(offset);
 	GLCD_PrintInteger(stepInterval);
-//item 10
+	//item 10
 	GLCD_GotoX(10);
 	GLCD_GotoLine(5);
 	GLCD_PrintString("LCD contrast");
 	GLCD_GotoX(offset);
 	GLCD_PrintInteger(lcdContrast);
-//item 11
+	//item 11
 	GLCD_GotoX(10);
 	GLCD_GotoLine(6);
 	GLCD_PrintString("Debug mode");
 	GLCD_GotoX(offset);
-	
-
-
 }
 else if (page==2){
-//item 12
+	//item 12
 	GLCD_GotoX(10);
 	GLCD_GotoLine(1);
 	GLCD_PrintString("Calibrate arrow");
 	GLCD_GotoX(offset);
-//item 13
+	//item 13
 	GLCD_GotoX(10);
 	GLCD_GotoLine(2);
 	GLCD_PrintString("Odometer reset");
-//item 14
+	//item 14
 	GLCD_GotoX(10);
 	GLCD_GotoLine(3);
 	GLCD_PrintString("Load defaults");
-//item 15
+	//item 15
 	GLCD_GotoX(10);
 	GLCD_GotoLine(4);
 	GLCD_PrintString("Exit");
@@ -513,11 +505,80 @@ while(1){
 											}
 											case 13:
 											{
-											//odometer reset
-												totalRotations = 0;
-												for (uint8_t i = 0;i<=ODOMETER_EEP_CELLS;i++){
-													eep_operations(EEP_ODOMETER_START_ADDRESS,EEPROM_ADDRESS_SHIFT,EEP_ODOMETER_WRITE);
-												}
+												uint8_t yesOrNo = 0;
+												
+												GLCD_Clear();
+												GLCD_GotoLine(2);
+												GLCD_GotoX(45);
+												GLCD_PrintString("RESET");
+												GLCD_GotoLine(4);
+												GLCD_GotoX(34);
+												GLCD_PrintString("ODOMETER?");
+												
+												
+												GLCD_GotoLine(6);
+												GLCD_GotoX(28);
+												GLCD_PrintString("NO");
+												GLCD_GotoX(84);
+												GLCD_PrintString("YES");
+												
+												reset_odometer:
+												GLCD_DrawRectangle(20+59*yesOrNo,45,46+59*yesOrNo, 57,GLCD_Black);
+												GLCD_DrawRectangle(20+59*!yesOrNo,45,46+59*!yesOrNo, 57,GLCD_White);
+												GLCD_Render();
+												
+												
+												while(button_monitor());
+												
+												while(1){
+													uint8_t button = button_monitor();
+													if ((button==2)||(button==3)){
+														yesOrNo = yesOrNo^_BV(0);
+														while(button_monitor());
+														goto reset_odometer;
+													}
+													else if(button==1){
+														if (yesOrNo){
+															GLCD_Clear();
+															GLCD_GotoLine(1);
+															GLCD_GotoX(8);
+															GLCD_PrintString("RESETING ODOMETER");
+															
+															GLCD_GotoLine(3);
+															GLCD_GotoX(2);
+															GLCD_PrintString("Cells cleared");
+															
+															GLCD_Render();
+															//GLCD_GotoLine(4);
+															
+															//odometer reset
+															totalRotations = 0;
+															for (uint8_t i = 0;i<=ODOMETER_EEP_CELLS;i++){
+																eep_operations(EEP_ODOMETER_START_ADDRESS,EEPROM_ADDRESS_SHIFT,EEP_ODOMETER_WRITE);
+															GLCD_GotoX(83);
+															GLCD_PrintInteger(i+1);
+															GLCD_PrintString("/");
+															GLCD_PrintInteger(ODOMETER_EEP_CELLS+1);
+															GLCD_Render();
+															}
+															
+															GLCD_GotoLine(6);
+															GLCD_GotoX(45);
+															GLCD_PrintString("DONE!");
+															GLCD_Render();
+															while(button_monitor());
+															while(!button_monitor());
+															break;
+															}else{
+															break;
+														}
+													}
+											
+													}
+											
+											
+											
+											
 												break;
 											}
 											case 14:
@@ -525,7 +586,6 @@ while(1){
 											//load defaults
 									uint8_t yesOrNo = 0;
 											
-											//GLCD_SetFont(Font5x8, 5, 8, GLCD_Merge);
 											GLCD_Clear();
 											GLCD_GotoLine(2);
 											GLCD_GotoX(40);
@@ -591,15 +651,12 @@ while(1){
 			}
 
 			else if(currentButton == 2)	menuItem++;
-
 			else if(currentButton == 3)	menuItem--;
 
 		while (!button_monitor());
 		menu_screen();
-
 		}
 	}
-
 }
 
 void main_screen()
@@ -810,7 +867,6 @@ void arrow_calibration(){
 		calibrationSteps = smSteps*2;
 	}
 
-
 steps = 0;
 phase = 0;
 
@@ -822,7 +878,6 @@ phase = 0;
 		OCR0 = stepInterval;
 		TIMSK|=_BV(OCIE0);
 
-
 while (arrowMoving);
 
 	_delay_ms(150);
@@ -831,7 +886,6 @@ while (arrowMoving);
 
 	dir = 0;
 	arrowMoving = 1;
-
 
 	TCCR0|=_BV(CS02)|_BV(CS00)|_BV(WGM01);
 	OCR0 = stepInterval;
@@ -860,7 +914,7 @@ void draw_arrow (uint8_t arrowDir){
 void draw_skull (void)
 {
 GLCD_Clear();
-GLCD_GotoXY(21+6, 7);
+GLCD_GotoXY(27, 7);
 GLCD_DrawBitmap(skull,86,52,GLCD_Black);
 GLCD_Render();
 }
@@ -935,13 +989,13 @@ int read_ADC(uint8_t mux, uint8_t cycles)
 		GLCD_GotoLine(1);
 		GLCD_GotoX(10);
 		GLCD_PrintString(text);
-		GLCD_GotoY(8+16);
+		GLCD_GotoY(24);
 		GLCD_GotoX(90);
 		GLCD_PrintString("Edit");
-		GLCD_GotoY(20+16);
+		GLCD_GotoY(36);
 		GLCD_GotoX(90);
 		GLCD_PrintString("Back");
-		GLCD_GotoY(32+16);
+		GLCD_GotoY(48);
 		GLCD_GotoX(90);
 		GLCD_PrintString("Save");
 
@@ -1032,17 +1086,11 @@ int read_ADC(uint8_t mux, uint8_t cycles)
 				GLCD_PrintInteger(digitsArr[digitIndex]);
 					if ((digitIndex==tens)&&(tens)){
 						GLCD_PrintString(".");
-					rectShift+=5;
+						rectShift+=5;
 					}
-				}
-
-
-
-		GLCD_InvertRect(rectShift,24-4,rectShift+12,40-4);
+		}
+		GLCD_InvertRect(rectShift,24-4,rectShift+12,36);
 		GLCD_Render();
-
-
-
 		while (button_monitor());
 		uint8_t currentButton = 0;
 			while(1){
@@ -1053,14 +1101,12 @@ int read_ADC(uint8_t mux, uint8_t cycles)
 							currentItem++;
 							if (currentItem==maxValueLength){
 								currentItem = 0;
-
 								//=====
 									while(button_monitor());
 									int8_t menuItem = 0;
-									GLCD_InvertRect(rectShift+5,24-4,rectShift+5+12,40-4);
+									GLCD_InvertRect(rectShift+5,20,rectShift+5+12,36);
 									while(1){
-									currentButton = button_monitor();
-
+										currentButton = button_monitor();
 										if(currentButton){
 											if (currentButton == 3) {
 												menuItem--;
@@ -1073,22 +1119,21 @@ int read_ADC(uint8_t mux, uint8_t cycles)
 											else if (currentButton == 1) {
 													if (!menuItem){	//getting back to value edit
 														currentItem = 0;
-														for (int8_t i = 0;i<3;i++){GLCD_DrawRectangle(86,5+16+i*12,116,17+16+i*12,GLCD_White);}
+														for (int8_t i = 0;i<3;i++){GLCD_DrawRectangle(86,21+i*12,116,33+i*12,GLCD_White);}
 														GLCD_Render();
 														break;
 													}
 													else if (menuItem == 1){
-														return currValue; //if changes are discarded - return initial value
+														return currValue; //if changes discarded - return initial value
 													}
 													else if (menuItem == 2){
 														return new_value();
 													}
 											}
-
 									}
-							for (int8_t i=0;i<3;i++){GLCD_DrawRectangle(86,5+16+i*12,116,17+16+i*12,GLCD_White);}
+							for (int8_t i=0;i<3;i++){GLCD_DrawRectangle(86,21+i*12,116,33+i*12,GLCD_White);}
 
-									GLCD_DrawRectangle(86,5+16+menuItem*12,116,17+16+menuItem*12,GLCD_Black);
+									GLCD_DrawRectangle(86,21+menuItem*12,116,33+menuItem*12,GLCD_Black);
 									GLCD_Render();
 							while(button_monitor());
 							while(!button_monitor());
@@ -1122,7 +1167,7 @@ int read_ADC(uint8_t mux, uint8_t cycles)
 						rectShift+=5;
 					}
 				}
-			GLCD_InvertRect(rectShift,24-4,rectShift+12,40-4);
+			GLCD_InvertRect(rectShift,20,rectShift+12,36);
 			GLCD_Render();
 			}
 		while(button_monitor());
