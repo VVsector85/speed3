@@ -89,7 +89,7 @@ void eep_operations (uint16_t eepStartAddress, uint8_t eepAddrShift, uint8_t wri
 uint16_t set_value (uint16_t maxValue, uint16_t minValue, uint16_t currValue, uint8_t tens, const char *text);
 void debug_screen();
 void default_values();
-const unsigned char phaseArrayFullStep [] = {
+const unsigned char phaseArrayFullStep [] = {	//FULL-STEP TWO PHASE
 //		  1122	
 //	      eppe   
 // 	0b00000001,	//ONE PHASE
@@ -99,10 +99,8 @@ const unsigned char phaseArrayFullStep [] = {
 // 	0b00000001,	
 // 	0b00000101,
 // 	0b00001010
-		   
 	
-	
-	0b00000110,	//FULL-STEP TWO PHASE
+	0b00000110,	
 	0b00000010,
 	0b00000000,
 	0b00000100,
@@ -110,19 +108,17 @@ const unsigned char phaseArrayFullStep [] = {
 	0b00000010,
 	0b00000000,
 	0b00000100
-		
-
 };								
 
-const unsigned char phaseArrayHalfStep [] = {
-	0b00000101,
+const unsigned char phaseArrayHalfStep [] = {	//HALF STEP
+	0b00000101,			
 	0b00000110,
 	0b00001010,
 	0b00000010,
 	0b00000001,
 	0b00000000,
 	0b00001000,
-	0b00000100			//HALF STEP
+	0b00000100			
 };
 void default_values(){
 	 lcdContrast = 250;
@@ -277,19 +273,19 @@ else
 
 
 void menu_screen(){
-	while (button_monitor());
+	
 uint8_t offset = 85;
 static int8_t menuItem;
 static int8_t page;
 
 
-if (menuItem > 5){page++;menuItem=0;}
-if (menuItem < 0){page--;menuItem=5;}
+if (menuItem > 5){page++;menuItem = 0;}
+if (menuItem < 0){page--;menuItem= 5;}
 if ((page == 2)&&(menuItem > 3)){
 	page = 0;
 	menuItem = 0;
 }
-if (page<0){page =2;menuItem=3;}
+if (page<0){page = 2;menuItem = 3;}
 GLCD_Clear();
 
 	GLCD_SetFont(Font5x8, 5, 8, GLCD_Merge);
@@ -333,7 +329,7 @@ GLCD_PrintInteger(stepMode);
 
 }
 
-if (page==1){
+else if (page==1){
 //item 6
 	GLCD_GotoX(10);
 	GLCD_GotoLine(1);
@@ -373,7 +369,7 @@ if (page==1){
 
 
 }
-if (page==2){
+else if (page==2){
 //item 12
 	GLCD_GotoX(10);
 	GLCD_GotoLine(1);
@@ -395,7 +391,7 @@ if (page==2){
 
 GLCD_InvertRect(0,menuItem*8+7,127,menuItem*8+15);
 GLCD_Render();
-
+while (button_monitor());
 uint8_t currentButton = 0;
 uint16_t newValue = 0;
 while(1){
@@ -527,8 +523,61 @@ while(1){
 											case 14:
 											{
 											//load defaults
-											default_values();
-											eep_operations(EEPROM_START_ADDRESS,EEPROM_ADDRESS_SHIFT,EEP_WRITE);
+									uint8_t yesOrNo = 0;
+											
+											//GLCD_SetFont(Font5x8, 5, 8, GLCD_Merge);
+											GLCD_Clear();
+											GLCD_GotoLine(2);
+											GLCD_GotoX(40);
+											GLCD_PrintString("RESTORE");
+											GLCD_GotoLine(4);
+											GLCD_GotoX(20);
+											GLCD_PrintString("DEFAULT values?");
+											
+											
+											GLCD_GotoLine(6);
+											GLCD_GotoX(28);
+											GLCD_PrintString("NO");
+											GLCD_GotoX(84);
+											GLCD_PrintString("YES");
+											
+											restore_defaults:
+											GLCD_DrawRectangle(20+59*yesOrNo,45,46+59*yesOrNo, 57,GLCD_Black);
+											GLCD_DrawRectangle(20+59*!yesOrNo,45,46+59*!yesOrNo, 57,GLCD_White);
+											GLCD_Render();
+											
+											
+											while(button_monitor());
+											
+											while(1){
+												uint8_t button = button_monitor();
+												if ((button==2)||(button==3)){
+													yesOrNo = yesOrNo^_BV(0);
+													while(button_monitor());
+													goto restore_defaults;
+												}
+												else if(button==1){
+													if (yesOrNo){
+														GLCD_Clear();
+														GLCD_GotoLine(3);
+														GLCD_GotoX(8);
+														GLCD_PrintString("LOADING DEFAULTS...");
+														GLCD_Render();
+														default_values();
+														eep_operations(EEPROM_START_ADDRESS,EEPROM_ADDRESS_SHIFT,EEP_WRITE);
+														GLCD_GotoLine(5);
+														GLCD_GotoX(45);
+														GLCD_PrintString("DONE!");
+														GLCD_Render();
+														while(button_monitor());
+														while(!button_monitor());
+														break;
+													}else{
+														break;
+													}
+												}
+											}
+											
 											break;
 											}
 											case 15:
@@ -545,7 +594,7 @@ while(1){
 
 			else if(currentButton == 3)	menuItem--;
 
-		//while (button_monitor());
+		while (!button_monitor());
 		menu_screen();
 
 		}
