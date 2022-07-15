@@ -1004,21 +1004,21 @@ END GROUP
  .bss.frequency
                 0x00800296        0x4 speed3.o
                 0x00800296                frequency
- .bss.steps     0x0080029a        0x2 speed3.o
-                0x0080029a                steps
- .bss.phase     0x0080029c        0x1 speed3.o
-                0x0080029c                phase
- .bss.arrowMoving
-                0x0080029d        0x1 speed3.o
-                0x0080029d                arrowMoving
- .bss.totalRotations
-                0x0080029e        0x4 speed3.o
-                0x0080029e                totalRotations
- .bss.tempTCNT  0x008002a2        0x1 speed3.o
-                0x008002a2                tempTCNT
  .bss.speedTimerPrecise
-                0x008002a3        0x4 speed3.o
-                0x008002a3                speedTimerPrecise
+                0x0080029a        0x4 speed3.o
+                0x0080029a                speedTimerPrecise
+ .bss.steps     0x0080029e        0x2 speed3.o
+                0x0080029e                steps
+ .bss.phase     0x008002a0        0x1 speed3.o
+                0x008002a0                phase
+ .bss.arrowMoving
+                0x008002a1        0x1 speed3.o
+                0x008002a1                arrowMoving
+ .bss.totalRotations
+                0x008002a2        0x4 speed3.o
+                0x008002a2                totalRotations
+ .bss.tempTCNT  0x008002a6        0x1 speed3.o
+                0x008002a6                tempTCNT
  .bss.speedTimerRoughTemp
                 0x008002a7        0x2 speed3.o
                 0x008002a7                speedTimerRoughTemp
@@ -1153,22 +1153,22 @@ END GROUP
 .debug_pubnames
  *(.debug_pubnames)
 
-.debug_info     0x00000000     0x6899
+.debug_info     0x00000000     0x6898
  *(.debug_info .gnu.linkonce.wi.*)
  .debug_info    0x00000000      0x4e6 C:/Program Files (x86)/Atmel/Studio/7.0/Packs/atmel/ATmega_DFP/1.6.364/gcc/dev/atmega32a/avr5/crtatmega32a.o
- .debug_info    0x000004e6     0x2e37 speed3.o
- .debug_info    0x0000331d     0x2bc5 SSD1306.o
- .debug_info    0x00005ee2      0x3b6 TWI.o
- .debug_info    0x00006298       0x99 C:/Program Files (x86)/Atmel/Studio/7.0/Packs/atmel/ATmega_DFP/1.6.364/gcc/dev/atmega32a/avr5\libatmega32a.a(eerd_byte.o)
- .debug_info    0x00006331       0x9a C:/Program Files (x86)/Atmel/Studio/7.0/Packs/atmel/ATmega_DFP/1.6.364/gcc/dev/atmega32a/avr5\libatmega32a.a(eerd_dword.o)
- .debug_info    0x000063cb       0x99 C:/Program Files (x86)/Atmel/Studio/7.0/Packs/atmel/ATmega_DFP/1.6.364/gcc/dev/atmega32a/avr5\libatmega32a.a(eerd_word.o)
- .debug_info    0x00006464       0x9a C:/Program Files (x86)/Atmel/Studio/7.0/Packs/atmel/ATmega_DFP/1.6.364/gcc/dev/atmega32a/avr5\libatmega32a.a(eeupd_byte.o)
- .debug_info    0x000064fe       0x9b C:/Program Files (x86)/Atmel/Studio/7.0/Packs/atmel/ATmega_DFP/1.6.364/gcc/dev/atmega32a/avr5\libatmega32a.a(eeupd_dword.o)
- .debug_info    0x00006599       0x9a C:/Program Files (x86)/Atmel/Studio/7.0/Packs/atmel/ATmega_DFP/1.6.364/gcc/dev/atmega32a/avr5\libatmega32a.a(eeupd_word.o)
- .debug_info    0x00006633       0x9a C:/Program Files (x86)/Atmel/Studio/7.0/Packs/atmel/ATmega_DFP/1.6.364/gcc/dev/atmega32a/avr5\libatmega32a.a(eewr_dword.o)
- .debug_info    0x000066cd       0x99 C:/Program Files (x86)/Atmel/Studio/7.0/Packs/atmel/ATmega_DFP/1.6.364/gcc/dev/atmega32a/avr5\libatmega32a.a(eewr_word.o)
- .debug_info    0x00006766       0x9a C:/Program Files (x86)/Atmel/Studio/7.0/Packs/atmel/ATmega_DFP/1.6.364/gcc/dev/atmega32a/avr5\libatmega32a.a(eerd_block.o)
- .debug_info    0x00006800       0x99 C:/Program Files (x86)/Atmel/Studio/7.0/Packs/atmel/ATmega_DFP/1.6.364/gcc/dev/atmega32a/avr5\libatmega32a.a(eewr_byte.o)
+ .debug_info    0x000004e6     0x2e36 speed3.o
+ .debug_info    0x0000331c     0x2bc5 SSD1306.o
+ .debug_info    0x00005ee1      0x3b6 TWI.o
+ .debug_info    0x00006297       0x99 C:/Program Files (x86)/Atmel/Studio/7.0/Packs/atmel/ATmega_DFP/1.6.364/gcc/dev/atmega32a/avr5\libatmega32a.a(eerd_byte.o)
+ .debug_info    0x00006330       0x9a C:/Program Files (x86)/Atmel/Studio/7.0/Packs/atmel/ATmega_DFP/1.6.364/gcc/dev/atmega32a/avr5\libatmega32a.a(eerd_dword.o)
+ .debug_info    0x000063ca       0x99 C:/Program Files (x86)/Atmel/Studio/7.0/Packs/atmel/ATmega_DFP/1.6.364/gcc/dev/atmega32a/avr5\libatmega32a.a(eerd_word.o)
+ .debug_info    0x00006463       0x9a C:/Program Files (x86)/Atmel/Studio/7.0/Packs/atmel/ATmega_DFP/1.6.364/gcc/dev/atmega32a/avr5\libatmega32a.a(eeupd_byte.o)
+ .debug_info    0x000064fd       0x9b C:/Program Files (x86)/Atmel/Studio/7.0/Packs/atmel/ATmega_DFP/1.6.364/gcc/dev/atmega32a/avr5\libatmega32a.a(eeupd_dword.o)
+ .debug_info    0x00006598       0x9a C:/Program Files (x86)/Atmel/Studio/7.0/Packs/atmel/ATmega_DFP/1.6.364/gcc/dev/atmega32a/avr5\libatmega32a.a(eeupd_word.o)
+ .debug_info    0x00006632       0x9a C:/Program Files (x86)/Atmel/Studio/7.0/Packs/atmel/ATmega_DFP/1.6.364/gcc/dev/atmega32a/avr5\libatmega32a.a(eewr_dword.o)
+ .debug_info    0x000066cc       0x99 C:/Program Files (x86)/Atmel/Studio/7.0/Packs/atmel/ATmega_DFP/1.6.364/gcc/dev/atmega32a/avr5\libatmega32a.a(eewr_word.o)
+ .debug_info    0x00006765       0x9a C:/Program Files (x86)/Atmel/Studio/7.0/Packs/atmel/ATmega_DFP/1.6.364/gcc/dev/atmega32a/avr5\libatmega32a.a(eerd_block.o)
+ .debug_info    0x000067ff       0x99 C:/Program Files (x86)/Atmel/Studio/7.0/Packs/atmel/ATmega_DFP/1.6.364/gcc/dev/atmega32a/avr5\libatmega32a.a(eewr_byte.o)
 
 .debug_abbrev   0x00000000      0xe3e
  *(.debug_abbrev)
@@ -1210,14 +1210,14 @@ END GROUP
  .debug_frame   0x00000334      0x800 SSD1306.o
  .debug_frame   0x00000b34       0xf4 TWI.o
 
-.debug_str      0x00000000      0xff3
+.debug_str      0x00000000      0xff7
  *(.debug_str)
  .debug_str     0x00000000      0x196 C:/Program Files (x86)/Atmel/Studio/7.0/Packs/atmel/ATmega_DFP/1.6.364/gcc/dev/atmega32a/avr5/crtatmega32a.o
- .debug_str     0x00000196      0x7ee speed3.o
-                                0x848 (size before relaxing)
- .debug_str     0x00000984      0x533 SSD1306.o
+ .debug_str     0x00000196      0x7f2 speed3.o
+                                0x84c (size before relaxing)
+ .debug_str     0x00000988      0x533 SSD1306.o
                                 0x750 (size before relaxing)
- .debug_str     0x00000eb7      0x13c TWI.o
+ .debug_str     0x00000ebb      0x13c TWI.o
                                 0x308 (size before relaxing)
 
 .debug_loc      0x00000000     0x59b2

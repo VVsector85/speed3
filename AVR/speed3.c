@@ -38,18 +38,17 @@
 
 volatile uint16_t speedTimerRough = 0;
 volatile uint16_t speedTimerRoughTemp = 0;
-uint32_t speedTimerPrecise = 0;
 volatile uint8_t tempTCNT = 0;
 volatile uint32_t totalRotations = 0;	//rotation counter
 volatile uint8_t arrowMoving = 0;
 volatile int8_t phase = 0; 
 volatile int16_t steps = 0;	//actual stepper motor shaft position
+uint32_t speedTimerPrecise = 0;
 double frequency = 0;
 double timePerTic = 0;	// duration of Counter1 tic in seconds
 double circLength = 0;	//wheel circumference between magnets
 double speedKmh = 0;
 double kmhPerStep = 0;
-
 uint16_t newSteps = 0;	//stepper motor shaft position needed
 uint8_t signalOn = 0;	//if turn or hazard lights on, = 1
 uint8_t firstMeasure = 0;
@@ -62,8 +61,6 @@ uint16_t signalCounter = 0;//counter of turn lights interval
 uint32_t distance = 0;
 uint32_t newDistance = 0;
 int8_t arrowCalibrated = 1;
-
-
 			//values of these variables are stored in EEPROM and could be changed from GUI
 uint8_t lcdContrast;
 #define LCD_CONTRAST_DEFAULT 250
@@ -976,9 +973,6 @@ uint16_t set_value (uint16_t maxValue, uint16_t minValue, uint16_t currValue, ui
 		GLCD_PrintString("max:");
 		GLCD_PrintInteger(maxValue);
 	}
-	
-	
-	
 
     uint16_t tempValue;
 	int8_t digitIndex;
