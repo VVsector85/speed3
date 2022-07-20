@@ -10,9 +10,9 @@
 #include <avr/interrupt.h>
 #include <avr/eeprom.h>
 
-#define pi 3.141592653		//pi
+#define pi 3.141592653		
 #define TIMER2_PRESCALER 256
-#define TIC  255UL		//amount of Timer2 tics between speedTimer incrementation (F_CPU=16Mhz, prescaler=256 1 tic = 16 us). 
+#define TIC  255		//amount of Timer2 tics between speedTimerRough incrementation (F_CPU=16Mhz, prescaler=256 1 tic = 16 us). 
 #define AREF 2.5		//reference voltage
 #define DEVIDER 6		//divider (for battery voltage measurement)
 #define SLEEP_VOLTAGE 100 //10V
@@ -27,39 +27,46 @@
 #define EEP_READ 0
 #define EEP_ODOMETER_WRITE 3
 #define EEP_ODOMETER_READ 2
-#define ODOMETER_EEP_CELLS 4  //+1 (counting from zero)
-#define BOUNCE_DELAY 1
-#define MAX_PERIOD 1500	//MAX_PERIOD*TIC*16us Speed is considered to be zero if delay between Hall sensor triggering is longer
+#define ODOMETER_EEP_CELLS 24  //+1 (counting from zero)
+#define BOUNCE_DELAY 50	//50 ms is usually enough
+#define MAX_PERIOD 1500	//MAX_PERIOD*TIC*16us Speed is considered to be zero if delay between Hall sensor actuations is longer
+#define PERIOD_INCREASE_TRESHOLD 60
 #define SIGNAL_COUNTER_MAX 300	//SIGNAL_COUNTER_MAX*1024*4us
+#define RIGHT 1
+#define LEFT 0
+#define PIN_RIGHT	PINB&_BV(4)
+#define PIN_LEFT	PINB&_BV(3)
+#define PIN_SET		PINB&_BV(5)
+#define PIN_DOWN	PINB&_BV(6)
+#define PIN_UP		PINB&_BV(7)
 #define BRICK_1 105
 #define BRICK_2 110
 #define BRICK_3 115
 #define BRICK_4 120
 
 volatile uint16_t speedTimerRough = 0;
-volatile uint16_t speedTimerRoughTemp = 0;
-volatile uint8_t tempTCNT = 0;
-volatile uint32_t totalRotations = 0;	//rotation counter
+volatile uint16_t speedTimerRoughPrevious = 0;
+volatile uint8_t previousTCNT2 = 0;
+volatile uint16_t sensorActations = 0;
 volatile uint8_t arrowMoving = 0;
 volatile int8_t phase = 0; 
 volatile int16_t steps = 0;	//actual stepper motor shaft position
 uint32_t speedTimerPrecise = 0;
 double frequency = 0;
 double timePerTic = 0;	// duration of Counter1 tic in seconds
-double circLength = 0;	//wheel circumference between magnets
+double circumference = 0;	//wheel circumference between magnets considering gear ratio
 double speedKmh = 0;
 double kmhPerStep = 0;
 uint16_t newSteps = 0;	//stepper motor shaft position needed
 uint8_t signalOn = 0;	//if turn or hazard lights on, = 1
 uint8_t firstMeasure = 0;
-uint8_t debugMode = 1;	//0
+uint8_t debugMode = 0;	//0
 int16_t voltage = 0;
 int16_t newVoltage = 0;
 uint8_t odometerCurrentAddress = 0;
 uint8_t dir = 0;
 uint16_t signalCounter = 0;//counter of turn lights interval
-uint32_t distance = 0;
-uint32_t newDistance = 0;
+uint32_t milage = 0;
 int8_t arrowCalibrated = 1;
 			//values of these variables are stored in EEPROM and could be changed from GUI
 uint8_t lcdContrast;
@@ -90,10 +97,10 @@ uint16_t pwmDial;
 #define PWM_DIAL_DEFAULT 1024
 #define PWM_DIAL_MIN 0
 #define PWM_DIAL_MAX 1024
-uint8_t scaleMax;		//speed max on the dial
+uint8_t scaleMax;		//maximum speed on the dial
 #define SCALE_MAX_DEFAULT 190
 #define SCALE_MAX_MIN 20
-#define SCALE_MAX_MAX 400
+#define SCALE_MAX_MAX 255
 uint8_t stepInterval; //interval between steps = stepInterval*64us (prescaler = 1024)
 #define STEP_INTERVAL_DEFAULT 150
 #define STEP_INTERVAL_MIN 50
@@ -114,7 +121,7 @@ void calculate_speed();
 void draw_arrow (uint8_t arrowDir);
 void draw_skull ();
 void main_screen();
-void speed_arrow_update();
+void arrow_position_update();
 void data_monitor();
 void signal_monitor();
 uint8_t button_monitor();
@@ -123,7 +130,7 @@ void arrow_calibration();
 void eep_operations (uint16_t eepStartAddress, uint8_t eepAddrShift, uint8_t writeOrRead);
 uint16_t set_value (uint16_t maxValue, uint16_t minValue, uint16_t currValue, uint8_t tens, const char *text);
 void debug_screen();
-void default_values();
+void set_default_values();
 const uint8_t phaseArrayFullStep [] = {	//FULL-STEP TWO PHASE
 	0b00000110,	
 	0b00000010,
@@ -145,7 +152,7 @@ const uint8_t phaseArrayHalfStep [] = {	//HALF STEP
 	0b00000100			
 };
 
-void default_values(){
+void set_default_values(){
 	 lcdContrast = LCD_CONTRAST_DEFAULT;
 	 magnetsOnWheel = MAGNETS_ON_WHEEL_DEFAULT;
 	 gearRatio = GEAR_RATIO_DEFAULT;
@@ -168,21 +175,18 @@ void presets (void){
 	DDRD|=_BV(5);//PWM ARROW LIGHT
 	PORTA|=_BV(3);//ENABLE 1 high (disabled)
 	PORTA|=_BV(0);//ENABLE 2 high (disabled)
-	PORTB|=_BV(5);//internal pull-up for external buttons
+	PORTB|=_BV(5);//internal pull-up for external buttons on PB5, PB6, PB7
 	PORTB|=_BV(6);
 	PORTB|=_BV(7);
-	//=======================ADC
+	//ADC setup
 	ADCSRA |= _BV(ADEN);
-	//=======================
 	ADCSRA |= _BV(ADPS0);		//
 	ADCSRA |= _BV(ADPS1);		// ADC prescaler 128
 	ADCSRA |= _BV(ADPS2);		//
-	//=======================
 	// reading data from EEPROM
-	uint8_t firstEepRead;
-	firstEepRead = eeprom_read_byte((uint8_t*)EEPROM_START_ADDRESS);//if the device is starting for the first time the default values have to be written to EEPROM
+	uint8_t	firstEepRead = eeprom_read_byte((uint8_t*)EEPROM_START_ADDRESS);//if the device is starting for the first time the default values have to be written to EEPROM
 	if (firstEepRead){
-		default_values();
+		set_default_values();
 		eep_operations(EEPROM_START_ADDRESS,EEPROM_ADDRESS_SHIFT,EEP_WRITE);
 		for (uint8_t i = 0;i<=ODOMETER_EEP_CELLS;i++){
 			eep_operations(EEP_ODOMETER_START_ADDRESS,EEPROM_ADDRESS_SHIFT,EEP_ODOMETER_WRITE);
@@ -190,9 +194,7 @@ void presets (void){
 	}
 	eep_operations(EEPROM_START_ADDRESS,EEPROM_ADDRESS_SHIFT,EEP_READ);
 	eep_operations(EEP_ODOMETER_START_ADDRESS,EEPROM_ADDRESS_SHIFT,EEP_ODOMETER_READ);
-	circLength = gearRatio * wheelDiameter * pi/magnetsOnWheel;			//circumferential length between the magnets
-	timePerTic = 1.0/(F_CPU/TIMER2_PRESCALER);			//counter tic time interval in seconds (16 us, Timer2 prescaler=256)
-	TCCR2|=_BV(CS21)|_BV(CS22)|_BV(WGM21);//Timer2 is used to measure time between Hall sensor triggering
+	TCCR2|=_BV(CS21)|_BV(CS22)|_BV(WGM21);//Timer2 is used to measure time between Hall sensor actuation
 	OCR2 = TIC-1; //upper limit of Timer2
 	//dial and arrow light PWM (Timer1)
 	TCCR1A = _BV(WGM10)|_BV(WGM11)|_BV(COM1B1)|_BV(COM1A1);	//Fast PWM 10-bit
@@ -200,6 +202,8 @@ void presets (void){
 	OCR1A = pwmArrow;
 	OCR1B = pwmDial;
 	//
+	circumference = gearRatio * wheelDiameter * pi/magnetsOnWheel;	
+	timePerTic = 1.0/(F_CPU/TIMER2_PRESCALER);			//counter tic time interval in seconds (16 us, Timer2 prescaler=256)
 	kmhPerStep = (360.0/(smSteps*stepMode))/degreesPerKmh;
 	//display initialization
 	GLCD_Setup();
@@ -208,13 +212,27 @@ void presets (void){
 	GLCD_Render();
 	sei();
 	if (!arrowCalibrated) arrow_calibration();
-	MCUCR|= _BV(ISC11); //External falling edge interrupt INT1 (Hall sensor)
+	MCUCR|= _BV(ISC11); //Falling edge interrupt INT1 (Hall sensor)
 	GICR|=_BV(INT1); //External Interrupt Enable INT1
+}
+
+int main(void)
+{
+	presets();
+	if (!debugMode)main_screen();
+	while(1){
+		data_monitor();
+		calculate_speed();
+		arrow_position_update();
+		if(!debugMode)signal_monitor();else debug_screen();
+		if(button_monitor()) menu_screen();
+	}
+	return 0;
 }
 
 ISR( TIMER0_COMP_vect ){
 	step(stepMode);
-	if (steps == newSteps){	//stop Stepper Motor rotation
+	if (steps == newSteps){	//if needed arrow position is reached - stop Stepper Motor rotation
 		arrowMoving = 0;
 		TCCR0 = 0;
 		OCR0 = 0;
@@ -236,12 +254,8 @@ void step(uint8_t mode){
 	}
 		 if (phase < 0) phase = 7;
 	else if (phase > 7) phase = 0;
-	tempPort = PORTA;
-	tempPort&=~_BV(0);
-	tempPort&=~_BV(1);
-	tempPort&=~_BV(2);
-	tempPort&=~_BV(3);
-		 if(mode == HALF_STEP) tempPort|=phaseArrayHalfStep[phase];
+	tempPort = PORTA&~0x0F;
+	if(mode == HALF_STEP) tempPort|=phaseArrayHalfStep[phase];
 	else if(mode == FULL_STEP) tempPort|=phaseArrayFullStep[phase];
 	PORTA = tempPort;
 }
@@ -255,25 +269,22 @@ ISR (TIMER1_OVF_vect){
 }
 
 ISR(INT1_vect){
-//interrupt occurs when Hall sensor is triggered
+//interrupt occurs when Hall sensor is actuated
 if (firstMeasure)
 	{
-		//speedTimerPrecise = (speedTimerRough*TIC) + TCNT2;
-		tempTCNT = TCNT2;
+		previousTCNT2 = TCNT2;
 		TCNT2 = 0;
-		speedTimerRoughTemp = speedTimerRough;
+		speedTimerRoughPrevious = speedTimerRough;
 		speedTimerRough = 0;
-		totalRotations++;
+		sensorActations++;
 	}
 else
 	{
-		//first triggering of the sensor starts TIMER2
 		TCNT2 = 0;
-		TIMSK|=_BV(OCIE2);
+		TIMSK|=_BV(OCIE2);	//first actuation of the Hall sensor enables TIMER2 compare match interrupt
 		firstMeasure = 1;
 	}
 }
-
 
 void menu_screen(){
 	uint8_t offset = 85;
@@ -524,7 +535,7 @@ void menu_screen(){
 						GLCD_GotoX(84);
 						GLCD_PrintString("YES");
 												
-reset_odometer:
+redraw_duttons1:
 						GLCD_DrawRectangle(20+59*yesOrNo,45,46+59*yesOrNo, 57,GLCD_Black);
 						GLCD_DrawRectangle(20+59*!yesOrNo,45,46+59*!yesOrNo, 57,GLCD_White);
 						GLCD_Render();
@@ -534,7 +545,7 @@ reset_odometer:
 							if ((button==2)||(button==3)){
 								yesOrNo = yesOrNo^_BV(0);
 								while(button_monitor());
-								goto reset_odometer;
+								goto redraw_duttons1;
 							}
 							else if(button==1){
 								if (yesOrNo){
@@ -548,7 +559,9 @@ reset_odometer:
 									GLCD_PrintString("Cells cleared");
 									GLCD_Render();
 									//odometer reset
-									totalRotations = 0;
+									milage = 0;
+									odometerCurrentAddress = 0;
+									sensorActations = 0;
 									for (uint8_t i = 0;i<=ODOMETER_EEP_CELLS;i++){
 										eep_operations(EEP_ODOMETER_START_ADDRESS,EEPROM_ADDRESS_SHIFT,EEP_ODOMETER_WRITE);
 									GLCD_GotoX(83);
@@ -557,6 +570,7 @@ reset_odometer:
 									GLCD_PrintInteger(ODOMETER_EEP_CELLS+1);
 									GLCD_Render();
 									}
+									odometerCurrentAddress = 0;
 									GLCD_GotoLine(6);
 									GLCD_GotoX(45);
 									GLCD_PrintString("DONE!");
@@ -589,7 +603,7 @@ reset_odometer:
 					GLCD_GotoX(84);
 					GLCD_PrintString("YES");
 											
-restore_defaults:
+redraw_buttons2:
 					GLCD_DrawRectangle(20+59*yesOrNo,45,46+59*yesOrNo, 57,GLCD_Black);
 					GLCD_DrawRectangle(20+59*!yesOrNo,45,46+59*!yesOrNo, 57,GLCD_White);
 					GLCD_Render();
@@ -600,7 +614,7 @@ restore_defaults:
 						if ((button==2)||(button==3)){
 							yesOrNo = yesOrNo^_BV(0);
 							while(button_monitor());
-							goto restore_defaults;
+							goto redraw_buttons2;
 						}
 						else if(button==1){
 							if (yesOrNo){
@@ -609,7 +623,7 @@ restore_defaults:
 								GLCD_GotoX(8);
 								GLCD_PrintString("LOADING DEFAULTS...");
 								GLCD_Render();
-								default_values();
+								set_default_values();
 								eep_operations(EEPROM_START_ADDRESS,EEPROM_ADDRESS_SHIFT,EEP_WRITE);
 								GLCD_GotoLine(5);
 								GLCD_GotoX(45);
@@ -663,44 +677,29 @@ void main_screen()
 
 		GLCD_SetFont(Arial_Narrow18x32, 18, 32, GLCD_Overwrite);
 		GLCD_GotoXY(4, 31);
-		uint32_t tempDistance = 0;
 
-		if (distance>99){tempDistance = distance/10;} else{tempDistance = 100;}
-		uint8_t l = 0;
-
-		while(tempDistance){
-			tempDistance/=10;
+		uint32_t tempMilage = milage/100;
+		int8_t l = 0;
+		
+		while(tempMilage){
+			tempMilage/=10;
 			l++;
 		}
-
+		if (l<2) l = 2;
 		int8_t zeros = 6-l;
-		if (distance < 100)zeros = 4;
-			if (zeros > 0){
 				for (int8_t i = 0;i<zeros;i++){
 					GLCD_PrintString("0");
 				}
-			}
-		GLCD_PrintDouble((double)distance/100.0,10);
-		GLCD_Render();
+		GLCD_PrintInteger(milage/1000);
+		if(milage<100000000){
+			GLCD_PrintString(".");
+			GLCD_PrintInteger((milage%1000)/100);
 		}
+		GLCD_Render();
+	}
 }
 
-
-int main(void)
-{
-	presets();
-	if (!debugMode)main_screen();
-	while(1){
-				data_monitor();
-				calculate_speed();
-				speed_arrow_update();
-				if(!debugMode)signal_monitor();else debug_screen();
-				if(button_monitor()) menu_screen();
-			}
-	return 0;
-}
-
-void speed_arrow_update(){
+void arrow_position_update(){
 	newSteps = speedKmh/kmhPerStep;
 	int16_t shiftSteps = steps - newSteps;	//difference in speedometer readings (for how many steps arrow should be shifted)
 	if (shiftSteps!=0){
@@ -715,26 +714,28 @@ void speed_arrow_update(){
 
 void calculate_speed(){
 	
-	if(speedTimerRough>speedTimerRoughTemp+10){
-			speedTimerPrecise = speedTimerRough*TIC;
+	if(speedTimerRough>speedTimerRoughPrevious+PERIOD_INCREASE_TRESHOLD/magnetsOnWheel){	//If speed suddenly reduces to zero then next actuation of Hall sensor is not going to happen, so speedTimerRoughPrevious and previousTCNT2 will not be updated
+			speedTimerPrecise = speedTimerRough*(uint32_t)TIC;								//so if speedTimerRough increases significantly in comparison to previous period, speedTimerPrecise is updated using current speedTimerRough value
 	}else{
-			speedTimerPrecise = (speedTimerRoughTemp*TIC) + tempTCNT;
+			speedTimerPrecise = (speedTimerRoughPrevious*(uint32_t)TIC) + previousTCNT2;
 	}
 	
 	if (speedTimerPrecise){
 				frequency = 1.0/(timePerTic*speedTimerPrecise);
-				speedKmh = frequency*3.6*circLength;
+				speedKmh = frequency*circumference*3.6; //3.6 is for converting m/s to km/h
 	}
-	if(speedTimerRough>(MAX_PERIOD/magnetsOnWheel)){//if Hall sensor was not triggered for too long (MIN_INTERVAL*TIC*0.16us) it means that vehicle does not move
+	if(speedTimerRough>(MAX_PERIOD/magnetsOnWheel)){	//if Hall sensor was not actuated for too long (MAX_PERIOD*TIC/magnetsOnWheel*0.16us) it means that vehicle does not move
 				TIMSK&=~_BV(OCIE2);
 				TCNT2 = 0;
 				speedTimerRough = 0;
-				speedTimerRoughTemp = 0;
+				speedTimerRoughPrevious = 0;
 				speedTimerPrecise = 0;
 				speedKmh = 0;
 				firstMeasure = 0;
 				frequency = 0;
-				tempTCNT = 0;
+				previousTCNT2 = 0;
+				milage=milage+sensorActations*circumference;
+				sensorActations = 0;
 				cli();
 				eep_operations(EEP_ODOMETER_START_ADDRESS, EEPROM_ADDRESS_SHIFT,EEP_ODOMETER_WRITE);	//if speed equals zero - save odometer data to EEPROM
 				sei();
@@ -743,23 +744,23 @@ void calculate_speed(){
 }
 
 void signal_monitor(){
-	if((!(PINB&_BV(4)))&&(PINB&_BV(3))){
-		draw_arrow(0);
+	if(!(PIN_RIGHT)&&(PIN_LEFT)){
+		draw_arrow(LEFT);
 		signalOn = 1;
 		signalCounter = 0;
 	}
-	else if((!(PINB&_BV(3)))&&(PINB&_BV(4))){
-		draw_arrow(1);
+	else if(!(PIN_LEFT)&&(PIN_RIGHT)){
+		draw_arrow(RIGHT);
 		signalOn = 1;
 		signalCounter = 0;
 	}
-	else if((!(PINB&_BV(4)))&&(!(PINB&_BV(3)))){
+	else if(!(PIN_RIGHT)&&!(PIN_LEFT)){
 		draw_skull();
 		signalOn = 1;
 		signalCounter = 0;
 	}
 	if (signalOn){
-		if((PINB&_BV(3))&&(PINB&_BV(4))){
+		if((PIN_LEFT)&&(PIN_RIGHT)){
 			GLCD_Clear();
 			GLCD_Render();
 			TIMSK|=_BV(TOIE1);		// If the turn signal (arrow) was switched on, and at the moment the turn signals are not lit, the timer is started.
@@ -792,35 +793,36 @@ void data_monitor(){
 		voltage = newVoltage;
 		if (!debugMode)main_screen();
 	}
-	newDistance = (round(totalRotations)*circLength)/10.0;
-	if (newDistance!=distance)	//when the distance value changes by 100 meters - update the data on the screen
+	uint32_t newMilage = sensorActations*circumference;
+	if (newMilage>99)	
 	{
-		distance = newDistance;
-		if (!debugMode)main_screen();
+		milage+= newMilage;
+		sensorActations = 0;
+		if (!debugMode)main_screen();//when the milage value changes by 100 meters - update data on the screen
 	}
 }
 
 uint8_t button_monitor(){
 	uint8_t btnPressed = 0;
-	if ((PINB&_BV(5))&&(PINB&_BV(6))&&(PINB&_BV(7))){
+	if ((PIN_SET)&&(PIN_DOWN)&&(PIN_UP)){
 		btnPressed = 0;
 		return 0;
 	}
-	else if((!(PINB&_BV(5)))&&(!btnPressed)){
+	else if((!(PIN_SET))&&(!btnPressed)){
 		_delay_ms(BOUNCE_DELAY);
-		if(!(PINB&_BV(5))){
+		if(!(PIN_SET)){
 			btnPressed = 1;
 		}
 	}
-	else if((!(PINB&_BV(6)))&&(!btnPressed)){
+	else if((!(PIN_DOWN))&&(!btnPressed)){
 		_delay_ms(BOUNCE_DELAY);
-		if(!(PINB&_BV(6))){
+		if(!(PIN_DOWN)){
 			btnPressed = 2;
 		}
 	}
-	else if((!(PINB&_BV(7)))&&(!btnPressed)){
+	else if((!(PIN_UP))&&(!btnPressed)){
 		_delay_ms(BOUNCE_DELAY);
-		if(!(PINB&_BV(7))){
+		if(!(PIN_UP)){
 			btnPressed = 3;
 		}
 	}
@@ -899,8 +901,8 @@ void eep_operations (uint16_t eepStartAddress, uint8_t eepAddrShift, uint8_t eep
 		eeprom_update_float((float*)(eepStartAddress+=eepAddrShift),wheelDiameter);
 		eeprom_update_float((float*)(eepStartAddress+=eepAddrShift),gearRatio);
 		eeprom_update_float((float*)(eepStartAddress+=eepAddrShift),degreesPerKmh);
-		}
-		if(eepAction==EEP_READ){
+	}
+	if(eepAction==EEP_READ){
 		pwmArrow = eeprom_read_word((uint16_t*)(eepStartAddress+=eepAddrShift));
 		if ((pwmArrow>PWM_ARROW_MAX)||(pwmArrow<PWM_ARROW_MIN))pwmArrow=PWM_ARROW_DEFAULT;
 		pwmDial = eeprom_read_word((uint16_t*)(eepStartAddress+=eepAddrShift));
@@ -925,18 +927,18 @@ void eep_operations (uint16_t eepStartAddress, uint8_t eepAddrShift, uint8_t eep
 		if ((degreesPerKmh>DEGREES_PER_KMH_MAX)||(degreesPerKmh<DEGREES_PER_KMH_MIN))degreesPerKmh=DEGREES_PER_KMH_DEFAULT;
 	}
 	if (eepAction==EEP_ODOMETER_READ){
-		uint32_t tempTotalRotations = 0;
+		uint32_t tempMilage = 0;
 		for (uint8_t i = 0;i<=ODOMETER_EEP_CELLS;i++){
-			tempTotalRotations = eeprom_read_dword((uint32_t*)(eepStartAddress+(eepAddrShift*i)));
-			if(tempTotalRotations>totalRotations){	//finding the latest record (the highest value)
-				totalRotations = tempTotalRotations;
-				odometerCurrentAddress = i + 1;	//address for the nexy record
+			tempMilage = eeprom_read_dword((uint32_t*)(eepStartAddress+(eepAddrShift*i)));
+			if(tempMilage>milage){	//finding the latest record (the highest value)
+				milage = tempMilage;
+				odometerCurrentAddress = i + 1;	//address for the next record
 				if (odometerCurrentAddress>ODOMETER_EEP_CELLS)odometerCurrentAddress = 0;
 			}
 		}
 	}
 	if (eepAction==EEP_ODOMETER_WRITE){
-			eeprom_write_dword((uint32_t*)(eepStartAddress+(odometerCurrentAddress*eepAddrShift)),totalRotations);
+			eeprom_write_dword((uint32_t*)(eepStartAddress+(odometerCurrentAddress*eepAddrShift)),milage);
 			odometerCurrentAddress++;
 			if (odometerCurrentAddress>ODOMETER_EEP_CELLS)odometerCurrentAddress = 0;
 	}
@@ -1159,7 +1161,7 @@ void debug_screen(){
 	GLCD_GotoX(xOfset3);
 	GLCD_PrintString("SRt");
 	GLCD_GotoX(xOfset4);
-	GLCD_PrintInteger(speedTimerRoughTemp);
+	GLCD_PrintInteger(speedTimerRoughPrevious);
 	
 	GLCD_GotoLine(5);
 	GLCD_GotoX(xOfset1);
@@ -1171,11 +1173,11 @@ void debug_screen(){
 	GLCD_GotoX(xOfset1);
 	GLCD_PrintString("TRt");
 	GLCD_GotoX(xOfset2);
-	GLCD_PrintInteger(totalRotations);
-	
-// 	GLCD_GotoX(xOfset3);
-// 	GLCD_PrintString("Dst");
-// 	GLCD_GotoX(xOfset4);
-// 	GLCD_PrintDouble(distance/100.0,100);
+	GLCD_PrintInteger(sensorActations);
+		
+	GLCD_GotoX(xOfset3);
+	GLCD_PrintString("Mil");
+	GLCD_GotoX(xOfset4);
+	GLCD_PrintDouble(milage/1000.0,100);
  	GLCD_Render();
 }
