@@ -31,7 +31,7 @@
 #define BOUNCE_DELAY 50	//50 ms is usually enough
 #define MAX_PERIOD 1500	//MAX_PERIOD*TIC*16us Speed is considered to be zero if delay between Hall sensor actuations is longer
 #define PERIOD_INCREASE_TRESHOLD 60
-#define SIGNAL_COUNTER_MAX 300	//SIGNAL_COUNTER_MAX*1024*4us
+#define SIGNAL_COUNTER_MAX 300	//SIGNAL_COUNTER_MAX*1024*4us ~1.2s
 #define RIGHT 1
 #define LEFT 0
 #define PIN_RIGHT	PINB&_BV(4)
@@ -53,11 +53,11 @@ volatile int8_t phase = 0;
 volatile int16_t steps = 0;	//actual stepper motor shaft position
 uint32_t speedTimerPrecise = 0;
 double frequency = 0;
-double timePerTic = 0;	// duration of Counter1 tic in seconds
+double timePerTic = 0;	//duration of Counter1 tic in seconds
 double circumference = 0;	//wheel circumference between magnets considering gear ratio
 double speedKmh = 0;
 double kmhPerStep = 0;
-uint16_t newSteps = 0;	//stepper motor shaft position needed
+uint16_t newSteps = 0;	//required stepper motor shaft position
 uint8_t signalOn = 0;	//if turn or hazard lights on, = 1
 uint8_t firstMeasure = 0;
 uint8_t debugMode = 0;	//0
@@ -66,8 +66,8 @@ int16_t newVoltage = 0;
 uint8_t odometerCurrentAddress = 0;
 uint8_t dir = 0;
 uint16_t signalCounter = 0;//counter of turn lights interval
-uint32_t milage = 0;
-int8_t arrowCalibrated = 1;
+uint32_t milage = 0;	//milage in meters
+int8_t arrowCalibrated = 0;	//0
 			//values of these variables are stored in EEPROM and could be changed from GUI
 uint8_t lcdContrast;
 #define LCD_CONTRAST_DEFAULT 250
@@ -83,29 +83,29 @@ double gearRatio; //needed if magnets are not on the wheel
 #define GEAR_RATIO_MAX 1
 double wheelDiameter;	//wheel diameter in meters
 #define WHEEL_DIAMETER_DEFAULT 0.70
-#define WHEEL_DIAMETER_MIN 0.3
+#define WHEEL_DIAMETER_MIN 0.1
 #define WHEEL_DIAMETER_MAX 2.0
-double degreesPerKmh;	//degrees per km/h
+double degreesPerKmh;
 #define DEGREES_PER_KMH_DEFAULT 1.275
 #define DEGREES_PER_KMH_MIN 0.1
 #define DEGREES_PER_KMH_MAX 5
-uint16_t pwmArrow;
+uint16_t pwmArrowLight;
 #define PWM_ARROW_DEFAULT 1024
 #define PWM_ARROW_MIN 0
 #define PWM_ARROW_MAX 1024
-uint16_t pwmDial;
+uint16_t pwmDialLight;
 #define PWM_DIAL_DEFAULT 1024
 #define PWM_DIAL_MIN 0
 #define PWM_DIAL_MAX 1024
-uint8_t scaleMax;		//maximum speed on the dial
-#define SCALE_MAX_DEFAULT 190
-#define SCALE_MAX_MIN 20
-#define SCALE_MAX_MAX 255
+uint8_t maxSpeedOnDial;	
+#define MAX_SPEED_DEFAULT 190
+#define MAX_SPEED_MIN 20
+#define MAX_SPEED_MAX 255
 uint8_t stepInterval; //interval between steps = stepInterval*64us (prescaler = 1024)
 #define STEP_INTERVAL_DEFAULT 150
 #define STEP_INTERVAL_MIN 50
 #define STEP_INTERVAL_MAX 255
-uint16_t smSteps;		//stepper motor steps
+uint16_t stepperMotorSteps;
 #define  STEPPER_MOTOR_STEPS_DEFAULT 96
 #define  STEPPER_MOTOR_STEPS_MIN 16
 #define  STEPPER_MOTOR_STEPS_MAX 400
@@ -151,21 +151,19 @@ const uint8_t phaseArrayHalfStep [] = {	//HALF STEP
 	0b00001000,
 	0b00000100			
 };
-
 void set_default_values(){
 	 lcdContrast = LCD_CONTRAST_DEFAULT;
 	 magnetsOnWheel = MAGNETS_ON_WHEEL_DEFAULT;
 	 gearRatio = GEAR_RATIO_DEFAULT;
 	 wheelDiameter = WHEEL_DIAMETER_DEFAULT;	
 	 degreesPerKmh = DEGREES_PER_KMH_DEFAULT;
-	 pwmArrow = PWM_ARROW_DEFAULT;
-	 pwmDial = PWM_DIAL_DEFAULT;
-	 scaleMax	= SCALE_MAX_DEFAULT;
+	 pwmArrowLight = PWM_ARROW_DEFAULT;
+	 pwmDialLight = PWM_DIAL_DEFAULT;
+	 maxSpeedOnDial	= MAX_SPEED_DEFAULT;
 	 stepInterval = STEP_INTERVAL_DEFAULT;
-	 smSteps =	STEPPER_MOTOR_STEPS_DEFAULT;
+	 stepperMotorSteps =	STEPPER_MOTOR_STEPS_DEFAULT;
 	 stepMode = STEP_MODE_DEFAULT;
 }
-
 void presets (void){
 	DDRA|=_BV(0); //ENABLE 2
 	DDRA|=_BV(1); //PHASE 2
@@ -184,7 +182,7 @@ void presets (void){
 	ADCSRA |= _BV(ADPS1);		// ADC prescaler 128
 	ADCSRA |= _BV(ADPS2);		//
 	// reading data from EEPROM
-	uint8_t	firstEepRead = eeprom_read_byte((uint8_t*)EEPROM_START_ADDRESS);//if the device is starting for the first time the default values have to be written to EEPROM
+	uint8_t	firstEepRead = eeprom_read_byte((uint8_t*)EEPROM_START_ADDRESS);//if the device is started for the first time the default values have to be written to EEPROM
 	if (firstEepRead){
 		set_default_values();
 		eep_operations(EEPROM_START_ADDRESS,EEPROM_ADDRESS_SHIFT,EEP_WRITE);
@@ -199,12 +197,12 @@ void presets (void){
 	//dial and arrow light PWM (Timer1)
 	TCCR1A = _BV(WGM10)|_BV(WGM11)|_BV(COM1B1)|_BV(COM1A1);	//Fast PWM 10-bit
 	TCCR1B = _BV(WGM12)|_BV(CS10)|_BV(CS11);	//prescaler = 64
-	OCR1A = pwmArrow;
-	OCR1B = pwmDial;
+	OCR1A = pwmArrowLight;
+	OCR1B = pwmDialLight;
 	//
 	circumference = gearRatio * wheelDiameter * pi/magnetsOnWheel;	
 	timePerTic = 1.0/(F_CPU/TIMER2_PRESCALER);			//counter tic time interval in seconds (16 us, Timer2 prescaler=256)
-	kmhPerStep = (360.0/(smSteps*stepMode))/degreesPerKmh;
+	kmhPerStep = (360.0/(stepperMotorSteps*stepMode))/degreesPerKmh;
 	//display initialization
 	GLCD_Setup();
 	GLCD_Clear();
@@ -215,7 +213,6 @@ void presets (void){
 	MCUCR|= _BV(ISC11); //Falling edge interrupt INT1 (Hall sensor)
 	GICR|=_BV(INT1); //External Interrupt Enable INT1
 }
-
 int main(void)
 {
 	presets();
@@ -229,17 +226,15 @@ int main(void)
 	}
 	return 0;
 }
-
 ISR( TIMER0_COMP_vect ){
 	step(stepMode);
-	if (steps == newSteps){	//if needed arrow position is reached - stop Stepper Motor rotation
+	if (steps == newSteps){	//if the required arrow position is reached - stop Stepper Motor rotation
 		arrowMoving = 0;
+		TIMSK&=~_BV(OCIE0);
 		TCCR0 = 0;
 		OCR0 = 0;
-		TIMSK&=~_BV(OCIE0);
 	}
 }
-
 void step(uint8_t mode){
 	uint8_t tempPort = 0;
 	if (dir)
@@ -252,22 +247,19 @@ void step(uint8_t mode){
 		phase--;
 		steps--;
 	}
-		 if (phase < 0) phase = 7;
+	if		(phase < 0) phase = 7;
 	else if (phase > 7) phase = 0;
 	tempPort = PORTA&~0x0F;
-	if(mode == HALF_STEP) tempPort|=phaseArrayHalfStep[phase];
-	else if(mode == FULL_STEP) tempPort|=phaseArrayFullStep[phase];
+	if(mode == HALF_STEP)		tempPort|=phaseArrayHalfStep[phase];
+	else if(mode == FULL_STEP)  tempPort|=phaseArrayFullStep[phase];
 	PORTA = tempPort;
 }
-
 ISR( TIMER2_COMP_vect ){
 	speedTimerRough++; //speedTimer increments each period timePerTic*TIC
 }
-
 ISR (TIMER1_OVF_vect){
 	if (signalOn) signalCounter++;
 }
-
 ISR(INT1_vect){
 //interrupt occurs when Hall sensor is actuated
 if (firstMeasure)
@@ -285,18 +277,45 @@ else
 		firstMeasure = 1;
 	}
 }
-
 void menu_screen(){
-	uint8_t offset = 85;
+	uint8_t yes_no_menu(const char *textLine1, uint8_t offsetLine1, const char *textLine2, uint8_t offsetLine2){
+		uint8_t yesOrNo = 0;
+		GLCD_Clear();
+		GLCD_GotoLine(2);
+		GLCD_GotoX(offsetLine1);
+		GLCD_PrintString(textLine1);
+		GLCD_GotoLine(4);
+		GLCD_GotoX(offsetLine2);
+		GLCD_PrintString(textLine2);
+		
+		GLCD_GotoLine(6);
+		GLCD_GotoX(28);
+		GLCD_PrintString("NO");
+		GLCD_GotoX(84);
+		GLCD_PrintString("YES");
+		
+		GLCD_DrawRectangle(20+59*yesOrNo,45,46+59*yesOrNo, 57,GLCD_Black);
+		GLCD_Render();
+		while(button_monitor());
+		while(1){
+			uint8_t button = button_monitor();
+			if ((button==2)||(button==3)){
+				yesOrNo = yesOrNo^_BV(0);
+				GLCD_DrawRectangle(20+59*yesOrNo,45,46+59*yesOrNo, 57,GLCD_Black);
+				GLCD_DrawRectangle(20+59*!yesOrNo,45,46+59*!yesOrNo, 57,GLCD_White);
+				GLCD_Render();
+				while(button_monitor());
+			}
+			else if(button==1) return yesOrNo;
+		}
+	}
+	uint8_t offset = 88;
 	static int8_t menuItem;
 	static int8_t page;
 	if (menuItem > 5){page++;menuItem = 0;}
 	if (menuItem < 0){page--;menuItem= 5;}
-	if ((page == 2)&&(menuItem > 3)){
-		page = 0;
-		menuItem = 0;
-	}
-	if (page<0){page = 2;menuItem = 3;}
+	if ((page == 2)&&(menuItem > 3)){page = 0; menuItem = 0;}
+	if (page < 0){page = 2;menuItem = 3;}
 	GLCD_Clear();
 	GLCD_SetFont(Font5x8, 5, 8, GLCD_Overwrite);
 	if(page==0){
@@ -305,23 +324,23 @@ void menu_screen(){
 		GLCD_GotoLine(1);
 		GLCD_PrintString("Dial PWM");
 		GLCD_GotoX(offset);
-		GLCD_PrintInteger(pwmDial);
+		GLCD_PrintInteger(pwmDialLight);
 		//item 1
 		GLCD_GotoX(10);
 		GLCD_GotoLine(2);
 		GLCD_PrintString("Arrow PWM");
 		GLCD_GotoX(offset);
-		GLCD_PrintInteger(pwmArrow);
+		GLCD_PrintInteger(pwmArrowLight);
 		//item 2
 		GLCD_GotoX(10);
 		GLCD_GotoLine(3);
-		GLCD_PrintString("Wheel D");
+		GLCD_PrintString("Wheel diam.");
 		GLCD_GotoX(offset);
 		GLCD_PrintDouble(wheelDiameter,1000);
 		//item 3
 		GLCD_GotoX(10);
 		GLCD_GotoLine(4);
-		GLCD_PrintString("Ratio");
+		GLCD_PrintString("Gear ratio");
 		GLCD_GotoX(offset);
 		GLCD_PrintDouble(gearRatio,1000);
 		//item 4
@@ -343,7 +362,7 @@ void menu_screen(){
 		GLCD_GotoLine(1);
 		GLCD_PrintString("Max speed");
 		GLCD_GotoX(offset);
-		GLCD_PrintInteger(scaleMax);
+		GLCD_PrintInteger(maxSpeedOnDial);
 		//item 7
 		GLCD_GotoX(10);
 		GLCD_GotoLine(2);
@@ -355,11 +374,11 @@ void menu_screen(){
 		GLCD_GotoLine(3);
 		GLCD_PrintString("SM steps");
 		GLCD_GotoX(offset);
-		GLCD_PrintInteger(smSteps);
+		GLCD_PrintInteger(stepperMotorSteps);
 		//item 9
 		GLCD_GotoX(10);
 		GLCD_GotoLine(4);
-		GLCD_PrintString("Step inter.");
+		GLCD_PrintString("Step interv.");
 		GLCD_GotoX(offset);
 		GLCD_PrintInteger(stepInterval);
 		//item 10
@@ -405,21 +424,21 @@ void menu_screen(){
 				switch(menuItem+6*page)		{
 					case 0:
 					{
-						newValue = set_value(PWM_DIAL_MAX,PWM_DIAL_MIN,pwmDial,0,"Dial light PWM");
-						if (newValue!=pwmDial){
-							pwmDial = newValue;
+						newValue = set_value(PWM_DIAL_MAX,PWM_DIAL_MIN,pwmDialLight,0,"Dial light PWM");
+						if (newValue!=pwmDialLight){
+							pwmDialLight = newValue;
 							eep_operations(EEPROM_START_ADDRESS,EEPROM_ADDRESS_SHIFT,EEP_WRITE);
-							OCR1B = pwmDial;
+							OCR1B = pwmDialLight;
 						}
 						break;
 					}
 					case 1:
 					{
-						newValue = set_value(PWM_DIAL_MAX,PWM_ARROW_MIN,pwmArrow,0,"Arrow light PWM");
-						if (newValue!=pwmArrow){
-							pwmArrow = newValue;
+						newValue = set_value(PWM_DIAL_MAX,PWM_ARROW_MIN,pwmArrowLight,0,"Arrow light PWM");
+						if (newValue!=pwmArrowLight){
+							pwmArrowLight = newValue;
 							eep_operations(EEPROM_START_ADDRESS,EEPROM_ADDRESS_SHIFT,EEP_WRITE);
-							OCR1A = pwmArrow;
+							OCR1A = pwmArrowLight;
 						}
 						break;
 					}
@@ -461,9 +480,9 @@ void menu_screen(){
 					}
 					case 6:
 					{
-						newValue = set_value(SCALE_MAX_MAX,SCALE_MAX_MIN,scaleMax,0,"Maximum speed");
-						if (newValue!=scaleMax){
-							scaleMax = newValue;
+						newValue = set_value(MAX_SPEED_MAX,MAX_SPEED_MIN,maxSpeedOnDial,0,"Maximum speed");
+						if (newValue!=maxSpeedOnDial){
+							maxSpeedOnDial = newValue;
 							eep_operations(EEPROM_START_ADDRESS,EEPROM_ADDRESS_SHIFT,EEP_WRITE);
 						}
 						break;
@@ -479,9 +498,9 @@ void menu_screen(){
 					}
 					case 8:
 					{
-						newValue = set_value(STEPPER_MOTOR_STEPS_MAX,STEPPER_MOTOR_STEPS_MIN,smSteps,0,"Stepper motor steps");
-						if (newValue!=smSteps){
-							smSteps = newValue;
+						newValue = set_value(STEPPER_MOTOR_STEPS_MAX,STEPPER_MOTOR_STEPS_MIN,stepperMotorSteps,0,"Stepper motor steps");
+						if (newValue!=stepperMotorSteps){
+							stepperMotorSteps = newValue;
 							eep_operations(EEPROM_START_ADDRESS,EEPROM_ADDRESS_SHIFT,EEP_WRITE);
 						}
 						break;
@@ -519,124 +538,62 @@ void menu_screen(){
 					}
 					case 13:
 					{
-						uint8_t yesOrNo = 0;
-												
-						GLCD_Clear();
-						GLCD_GotoLine(2);
-						GLCD_GotoX(45);
-						GLCD_PrintString("RESET");
-						GLCD_GotoLine(4);
-						GLCD_GotoX(34);
-						GLCD_PrintString("ODOMETER?");
-																			
-						GLCD_GotoLine(6);
-						GLCD_GotoX(28);
-						GLCD_PrintString("NO");
-						GLCD_GotoX(84);
-						GLCD_PrintString("YES");
-												
-redraw_duttons1:
-						GLCD_DrawRectangle(20+59*yesOrNo,45,46+59*yesOrNo, 57,GLCD_Black);
-						GLCD_DrawRectangle(20+59*!yesOrNo,45,46+59*!yesOrNo, 57,GLCD_White);
-						GLCD_Render();
-						while(button_monitor());
-						while(1){
-							uint8_t button = button_monitor();
-							if ((button==2)||(button==3)){
-								yesOrNo = yesOrNo^_BV(0);
-								while(button_monitor());
-								goto redraw_duttons1;
+ 						if(yes_no_menu("RESET",45,"ODOMETER?",34)){
+							GLCD_Clear();
+							GLCD_GotoLine(1);
+							GLCD_GotoX(6);
+							GLCD_PrintString("RESETTING ODOMETER");
+														
+							GLCD_GotoLine(3);
+							GLCD_GotoX(2);
+							GLCD_PrintString("Cells cleared");
+							GLCD_Render();
+							//odometer reset
+							milage = 0;
+							odometerCurrentAddress = 0;
+							sensorActations = 0;
+							for (uint8_t i = 0;i<=ODOMETER_EEP_CELLS;i++){
+								eep_operations(EEP_ODOMETER_START_ADDRESS,EEPROM_ADDRESS_SHIFT,EEP_ODOMETER_WRITE);
+								GLCD_GotoX(83);
+								GLCD_PrintInteger(i+1);
+								GLCD_PrintString("/");
+								GLCD_PrintInteger(ODOMETER_EEP_CELLS+1);
+								GLCD_Render();
 							}
-							else if(button==1){
-								if (yesOrNo){
-									GLCD_Clear();
-									GLCD_GotoLine(1);
-									GLCD_GotoX(8);
-									GLCD_PrintString("RESETING ODOMETER");
-															
-									GLCD_GotoLine(3);
-									GLCD_GotoX(2);
-									GLCD_PrintString("Cells cleared");
-									GLCD_Render();
-									//odometer reset
-									milage = 0;
-									odometerCurrentAddress = 0;
-									sensorActations = 0;
-									for (uint8_t i = 0;i<=ODOMETER_EEP_CELLS;i++){
-										eep_operations(EEP_ODOMETER_START_ADDRESS,EEPROM_ADDRESS_SHIFT,EEP_ODOMETER_WRITE);
-									GLCD_GotoX(83);
-									GLCD_PrintInteger(i+1);
-									GLCD_PrintString("/");
-									GLCD_PrintInteger(ODOMETER_EEP_CELLS+1);
-									GLCD_Render();
-									}
-									odometerCurrentAddress = 0;
-									GLCD_GotoLine(6);
-									GLCD_GotoX(45);
-									GLCD_PrintString("DONE!");
-									GLCD_Render();
-									while(button_monitor());
-									while(!button_monitor());
-									break;
-									}else{
-									break;
-								}
-							}
-						}
+							odometerCurrentAddress = 0;
+							GLCD_GotoLine(6);
+							GLCD_GotoX(45);
+							GLCD_PrintString("DONE!");
+							GLCD_Render();
+							while(button_monitor());
+							while(!button_monitor());
+ 							break;
+						}else{
+ 							break;
+ 						}
 						break;
 					}
 					case 14:
 					{
 					//load defaults
-					uint8_t yesOrNo = 0;
-					GLCD_Clear();
-					GLCD_GotoLine(2);
-					GLCD_GotoX(40);
-					GLCD_PrintString("RESTORE");
-					GLCD_GotoLine(4);
-					GLCD_GotoX(20);
-					GLCD_PrintString("DEFAULT values?");
-										
-					GLCD_GotoLine(6);
-					GLCD_GotoX(28);
-					GLCD_PrintString("NO");
-					GLCD_GotoX(84);
-					GLCD_PrintString("YES");
-											
-redraw_buttons2:
-					GLCD_DrawRectangle(20+59*yesOrNo,45,46+59*yesOrNo, 57,GLCD_Black);
-					GLCD_DrawRectangle(20+59*!yesOrNo,45,46+59*!yesOrNo, 57,GLCD_White);
-					GLCD_Render();
-										
-					while(button_monitor());
-					while(1){
-						uint8_t button = button_monitor();
-						if ((button==2)||(button==3)){
-							yesOrNo = yesOrNo^_BV(0);
+						if (yes_no_menu("RESTORE",40,"DEFAULT values?",20)){
+							GLCD_Clear();
+							GLCD_GotoLine(3);
+							GLCD_GotoX(8);
+							GLCD_PrintString("LOADING DEFAULTS...");
+							GLCD_Render();
+							set_default_values();
+							eep_operations(EEPROM_START_ADDRESS,EEPROM_ADDRESS_SHIFT,EEP_WRITE);
+							GLCD_GotoLine(5);
+							GLCD_GotoX(45);
+							GLCD_PrintString("DONE!");
+							GLCD_Render();
 							while(button_monitor());
-							goto redraw_buttons2;
-						}
-						else if(button==1){
-							if (yesOrNo){
-								GLCD_Clear();
-								GLCD_GotoLine(3);
-								GLCD_GotoX(8);
-								GLCD_PrintString("LOADING DEFAULTS...");
-								GLCD_Render();
-								set_default_values();
-								eep_operations(EEPROM_START_ADDRESS,EEPROM_ADDRESS_SHIFT,EEP_WRITE);
-								GLCD_GotoLine(5);
-								GLCD_GotoX(45);
-								GLCD_PrintString("DONE!");
-								GLCD_Render();
-								while(button_monitor());
-								while(!button_monitor());
-								break;
+							while(!button_monitor());
+							break;
 							}else{
-								break;
-							}
+							break;
 						}
-					}
 						break;
 					}
 					case 15:
@@ -653,12 +610,11 @@ redraw_buttons2:
 		menu_screen();
 		}
 	}
+	
 }
-
 void main_screen()
 {
 	if (!signalOn){
-
 		uint8_t offsetX = 10;
 		uint8_t offsetY = 11;
 		GLCD_Clear();
@@ -691,14 +647,13 @@ void main_screen()
 					GLCD_PrintString("0");
 				}
 		GLCD_PrintInteger(milage/1000);
-		if(milage<100000000){
+		if(milage<100000000){	
 			GLCD_PrintString(".");
 			GLCD_PrintInteger((milage%1000)/100);
 		}
 		GLCD_Render();
 	}
 }
-
 void arrow_position_update(){
 	newSteps = speedKmh/kmhPerStep;
 	int16_t shiftSteps = steps - newSteps;	//difference in speedometer readings (for how many steps arrow should be shifted)
@@ -711,38 +666,34 @@ void arrow_position_update(){
 		TIMSK|=_BV(OCIE0);
 	}
 }
-
 void calculate_speed(){
-	
 	if(speedTimerRough>speedTimerRoughPrevious+PERIOD_INCREASE_TRESHOLD/magnetsOnWheel){	//If speed suddenly reduces to zero then next actuation of Hall sensor is not going to happen, so speedTimerRoughPrevious and previousTCNT2 will not be updated
 			speedTimerPrecise = speedTimerRough*(uint32_t)TIC;								//so if speedTimerRough increases significantly in comparison to previous period, speedTimerPrecise is updated using current speedTimerRough value
 	}else{
 			speedTimerPrecise = (speedTimerRoughPrevious*(uint32_t)TIC) + previousTCNT2;
 	}
-	
 	if (speedTimerPrecise){
-				frequency = 1.0/(timePerTic*speedTimerPrecise);
-				speedKmh = frequency*circumference*3.6; //3.6 is for converting m/s to km/h
+			frequency = 1.0/(timePerTic*speedTimerPrecise);
+			speedKmh = frequency*circumference*3.6; //3.6 is for converting m/s to km/h
 	}
 	if(speedTimerRough>(MAX_PERIOD/magnetsOnWheel)){	//if Hall sensor was not actuated for too long (MAX_PERIOD*TIC/magnetsOnWheel*0.16us) it means that vehicle does not move
-				TIMSK&=~_BV(OCIE2);
-				TCNT2 = 0;
-				speedTimerRough = 0;
-				speedTimerRoughPrevious = 0;
-				speedTimerPrecise = 0;
-				speedKmh = 0;
-				firstMeasure = 0;
-				frequency = 0;
-				previousTCNT2 = 0;
-				milage=milage+sensorActations*circumference;
-				sensorActations = 0;
-				cli();
-				eep_operations(EEP_ODOMETER_START_ADDRESS, EEPROM_ADDRESS_SHIFT,EEP_ODOMETER_WRITE);	//if speed equals zero - save odometer data to EEPROM
-				sei();
+			TIMSK&=~_BV(OCIE2);
+			TCNT2 = 0;
+			speedTimerRough = 0;
+			speedTimerRoughPrevious = 0;
+			speedTimerPrecise = 0;
+			speedKmh = 0;
+			firstMeasure = 0;
+			frequency = 0;
+			previousTCNT2 = 0;
+			milage = milage + sensorActations*circumference;
+			sensorActations = 0;
+			cli();
+			eep_operations(EEP_ODOMETER_START_ADDRESS, EEPROM_ADDRESS_SHIFT,EEP_ODOMETER_WRITE);	//if speed equals zero - save odometer data to EEPROM
+			sei();
 	}
-	if (speedKmh>scaleMax)speedKmh = scaleMax;
+	if (speedKmh>maxSpeedOnDial)speedKmh = maxSpeedOnDial;
 }
-
 void signal_monitor(){
 	if(!(PIN_RIGHT)&&(PIN_LEFT)){
 		draw_arrow(LEFT);
@@ -774,10 +725,9 @@ void signal_monitor(){
 		}
 	}
 }
-
 void data_monitor(){
 	newVoltage = (read_ADC(ADC_MUX,ADC_CYCLES)/102.3)*AREF*DEVIDER;
-	if (newVoltage<SLEEP_VOLTAGE){//Disabling power consumers during ignition to prevent MCU from reboot
+	if ((newVoltage<SLEEP_VOLTAGE)&&(!debugMode)){	//Disabling power consumers during ignition to prevent MCU from reboot
 		PORTA|=_BV(3);
 		PORTA|=_BV(0);
 		OCR1A = 0;
@@ -785,8 +735,8 @@ void data_monitor(){
 		GLCD_Clear();
 		GLCD_Render();
 		while((read_ADC(ADC_MUX,ADC_CYCLES)/102.3)*AREF*DEVIDER<SLEEP_VOLTAGE);
-		OCR1A = pwmArrow;
-		OCR1B = pwmDial;
+		OCR1A = pwmArrowLight;
+		OCR1B = pwmDialLight;
 	}
 	if (newVoltage!=voltage)	//if voltage value changes - update data on the screen
 	{
@@ -801,7 +751,6 @@ void data_monitor(){
 		if (!debugMode)main_screen();//when the milage value changes by 100 meters - update data on the screen
 	}
 }
-
 uint8_t button_monitor(){
 	uint8_t btnPressed = 0;
 	if ((PIN_SET)&&(PIN_DOWN)&&(PIN_UP)){
@@ -828,11 +777,10 @@ uint8_t button_monitor(){
 	}
 	return btnPressed;
 }
-
 void arrow_calibration(){
 	steps = 0;
 	phase = 0;
-	newSteps = smSteps*stepMode/4;	//moving arrow 90 degrees clockwise
+	newSteps = stepperMotorSteps*stepMode/4;	//moving arrow 90 degrees clockwise
 	dir = 1;
 	arrowMoving = 1;
 	TCCR0|=_BV(CS02)|_BV(CS00)|_BV(WGM01);
@@ -840,7 +788,7 @@ void arrow_calibration(){
 	TIMSK|=_BV(OCIE0);
 	while (arrowMoving);
 	_delay_ms(150);
-	steps = smSteps*stepMode;
+	steps = stepperMotorSteps*stepMode;
 	newSteps = 0;  //moving arrow 360 degrees counterclockwise to make sure it is in zero position
 	dir = 0;
 	arrowMoving = 1;
@@ -852,7 +800,6 @@ void arrow_calibration(){
 	newSteps = 0;
 	arrowCalibrated = 1;
 }
-
 void draw_arrow (uint8_t arrowDir){
 	if (arrowDir){
 		GLCD_Clear();
@@ -866,7 +813,6 @@ void draw_arrow (uint8_t arrowDir){
 		GLCD_Render();
 	}
 }
-
 void draw_skull (void)
 {
 	GLCD_Clear();
@@ -874,7 +820,6 @@ void draw_skull (void)
 	GLCD_DrawBitmap(skull,86,52,GLCD_Black);
 	GLCD_Render();
 }
-
 uint16_t read_ADC(uint8_t mux, uint8_t cycles){
 	ADMUX = mux;
 	uint16_t tmp = 0;
@@ -886,15 +831,14 @@ uint16_t read_ADC(uint8_t mux, uint8_t cycles){
 	}
 	return tmp/cycles;
 }
-
 void eep_operations (uint16_t eepStartAddress, uint8_t eepAddrShift, uint8_t eepAction){
 	if (eepAction==EEP_WRITE){
 		eeprom_update_byte((uint8_t*)eepStartAddress,0);
-		eeprom_update_word((uint16_t*)(eepStartAddress+=eepAddrShift),pwmArrow);
-		eeprom_update_word((uint16_t*)(eepStartAddress+=eepAddrShift),pwmDial);
-		eeprom_update_byte((uint8_t*)(eepStartAddress+=eepAddrShift),scaleMax);
+		eeprom_update_word((uint16_t*)(eepStartAddress+=eepAddrShift),pwmArrowLight);
+		eeprom_update_word((uint16_t*)(eepStartAddress+=eepAddrShift),pwmDialLight);
+		eeprom_update_byte((uint8_t*)(eepStartAddress+=eepAddrShift),maxSpeedOnDial);
 		eeprom_update_byte((uint8_t*)(eepStartAddress+=eepAddrShift),stepInterval);
-		eeprom_update_word((uint16_t*)(eepStartAddress+=eepAddrShift),smSteps);
+		eeprom_update_word((uint16_t*)(eepStartAddress+=eepAddrShift),stepperMotorSteps);
 		eeprom_update_byte((uint8_t*)(eepStartAddress+=eepAddrShift),lcdContrast);
 		eeprom_update_byte((uint8_t*)(eepStartAddress+=eepAddrShift),magnetsOnWheel);
 		eeprom_update_byte((uint8_t*)(eepStartAddress+=eepAddrShift),stepMode);
@@ -903,16 +847,16 @@ void eep_operations (uint16_t eepStartAddress, uint8_t eepAddrShift, uint8_t eep
 		eeprom_update_float((float*)(eepStartAddress+=eepAddrShift),degreesPerKmh);
 	}
 	if(eepAction==EEP_READ){
-		pwmArrow = eeprom_read_word((uint16_t*)(eepStartAddress+=eepAddrShift));
-		if ((pwmArrow>PWM_ARROW_MAX)||(pwmArrow<PWM_ARROW_MIN))pwmArrow=PWM_ARROW_DEFAULT;
-		pwmDial = eeprom_read_word((uint16_t*)(eepStartAddress+=eepAddrShift));
-		if ((pwmDial>PWM_DIAL_MAX)||(pwmDial<PWM_DIAL_MIN))pwmDial=PWM_ARROW_DEFAULT;
-		scaleMax = eeprom_read_byte((uint8_t*)(eepStartAddress+=eepAddrShift));
-		if ((scaleMax>SCALE_MAX_MAX)||(scaleMax<SCALE_MAX_MIN))scaleMax=SCALE_MAX_DEFAULT;
+		pwmArrowLight = eeprom_read_word((uint16_t*)(eepStartAddress+=eepAddrShift));
+		if ((pwmArrowLight>PWM_ARROW_MAX)||(pwmArrowLight<PWM_ARROW_MIN))pwmArrowLight=PWM_ARROW_DEFAULT;
+		pwmDialLight = eeprom_read_word((uint16_t*)(eepStartAddress+=eepAddrShift));
+		if ((pwmDialLight>PWM_DIAL_MAX)||(pwmDialLight<PWM_DIAL_MIN))pwmDialLight=PWM_ARROW_DEFAULT;
+		maxSpeedOnDial = eeprom_read_byte((uint8_t*)(eepStartAddress+=eepAddrShift));
+		if ((maxSpeedOnDial>MAX_SPEED_MAX)||(maxSpeedOnDial<MAX_SPEED_MIN))maxSpeedOnDial=MAX_SPEED_DEFAULT;
 		stepInterval = eeprom_read_byte((uint8_t*)(eepStartAddress+=eepAddrShift));
 		if ((stepInterval>STEP_INTERVAL_MAX)||(stepInterval<STEP_INTERVAL_MIN))stepInterval=STEP_INTERVAL_DEFAULT;
-		smSteps = eeprom_read_word((uint16_t*)(eepStartAddress+=eepAddrShift));
-		if ((smSteps>STEPPER_MOTOR_STEPS_MAX)||(smSteps<STEPPER_MOTOR_STEPS_MIN))smSteps=STEPPER_MOTOR_STEPS_DEFAULT;
+		stepperMotorSteps = eeprom_read_word((uint16_t*)(eepStartAddress+=eepAddrShift));
+		if ((stepperMotorSteps>STEPPER_MOTOR_STEPS_MAX)||(stepperMotorSteps<STEPPER_MOTOR_STEPS_MIN))stepperMotorSteps=STEPPER_MOTOR_STEPS_DEFAULT;
 		lcdContrast = eeprom_read_byte((uint8_t*)(eepStartAddress+=eepAddrShift));
 		if ((lcdContrast>LCD_CONTRAST_MAX)||(lcdContrast<LCD_CONTRAST_MIN))lcdContrast=STEP_INTERVAL_DEFAULT;
 		magnetsOnWheel = eeprom_read_byte((uint8_t*)(eepStartAddress+=eepAddrShift));
@@ -928,6 +872,7 @@ void eep_operations (uint16_t eepStartAddress, uint8_t eepAddrShift, uint8_t eep
 	}
 	if (eepAction==EEP_ODOMETER_READ){
 		uint32_t tempMilage = 0;
+		odometerCurrentAddress = 0;
 		for (uint8_t i = 0;i<=ODOMETER_EEP_CELLS;i++){
 			tempMilage = eeprom_read_dword((uint32_t*)(eepStartAddress+(eepAddrShift*i)));
 			if(tempMilage>milage){	//finding the latest record (the highest value)
@@ -943,9 +888,7 @@ void eep_operations (uint16_t eepStartAddress, uint8_t eepAddrShift, uint8_t eep
 			if (odometerCurrentAddress>ODOMETER_EEP_CELLS)odometerCurrentAddress = 0;
 	}
 }
-
 uint16_t set_value (uint16_t maxValue, uint16_t minValue, uint16_t currValue, uint8_t tens, const char *text){
-
 	GLCD_SetFont(Font5x8, 5, 8, GLCD_Overwrite);
 	GLCD_Clear();
 	GLCD_GotoLine(1);
@@ -954,28 +897,30 @@ uint16_t set_value (uint16_t maxValue, uint16_t minValue, uint16_t currValue, ui
 	GLCD_GotoXY(90,24);
 	GLCD_PrintString("Edit");
 	GLCD_GotoXY(90,36);
-	GLCD_PrintString("Back");
+	GLCD_PrintString("Exit");
 	GLCD_GotoXY(90,48);
 	GLCD_PrintString("Save");
-	
-	if (tens){
-		uint16_t devider = 1;
-		for (int8_t i = 0;i<tens;i++){devider*=10;}
-		GLCD_GotoXY(6,41);
-		GLCD_PrintString("min:");
-		GLCD_PrintDouble(minValue/(double)devider,devider);
-		GLCD_GotoXY(6,51);
-		GLCD_PrintString("max:");
-		GLCD_PrintDouble(maxValue/(double)devider,devider);
-		}else{
-		GLCD_GotoXY(6,41);
-		GLCD_PrintString("min:");
-		GLCD_PrintInteger(minValue);
-		GLCD_GotoXY(6,51);
-		GLCD_PrintString("max:");
-		GLCD_PrintInteger(maxValue);
-	}
-
+	void print_min_max(){
+			GLCD_SetFont(Font5x8, 5, 8, GLCD_Overwrite);
+			GLCD_GotoXY(6,41);
+			GLCD_PrintString("min:");
+			GLCD_GotoXY(6,51);
+			GLCD_PrintString("max:");
+			if (tens){
+				uint16_t devider = 1;
+				for (int8_t i = 0;i<tens;i++){devider*=10;}
+				GLCD_GotoXY(30,41);
+				GLCD_PrintDouble(minValue/(double)devider,devider);
+				GLCD_GotoXY(30,51);
+				GLCD_PrintDouble(maxValue/(double)devider,devider);
+				}else{
+				GLCD_GotoXY(30,41);
+				GLCD_PrintInteger(minValue);
+				GLCD_GotoXY(30,51);
+				GLCD_PrintInteger(maxValue);
+			}
+			GLCD_SetFont(Arial12x17, 12, 17, GLCD_Overwrite);
+		}
     uint16_t tempValue;
 	int8_t digitIndex;
 	uint8_t valueLength;
@@ -1022,17 +967,19 @@ restore_initial_value:
 			digitsArr[digitIndex] = 0;	//if current value is shorter then maximum value - set extra digits to zero
 		}
 	}
+	
 	GLCD_GotoXY(5,20);
 	GLCD_SetFont(Arial12x17, 12, 17, GLCD_Overwrite);
 	int8_t rectShift = (5+(maxValueLength-1)*13)-currentItem*13;
 	for(digitIndex = maxValueLength - 1;digitIndex>=0;digitIndex--){
-	GLCD_PrintInteger(digitsArr[digitIndex]);
+		GLCD_PrintInteger(digitsArr[digitIndex]);
 		if ((digitIndex==tens)&&(tens)){
 			GLCD_PrintString(".");
 			rectShift+=5;
 		}
 	}
 	GLCD_InvertRect(rectShift,20,rectShift+12,36);
+	print_min_max();
 	GLCD_Render();
 	while (button_monitor());
 	uint8_t currentButton = 0;
@@ -1046,10 +993,9 @@ restore_initial_value:
 								currentItem = 0;
 								uint16_t checkValue = new_value();
 								if((checkValue>maxValue)||(checkValue<minValue))goto restore_initial_value;
-								//=====
-								while(button_monitor());
 								int8_t menuItem = 0;
 								GLCD_InvertRect(rectShift+5,20,rectShift+5+12,36);
+								while(button_monitor());
 								while(1){
 										currentButton = button_monitor();
 										if(currentButton){
@@ -1065,7 +1011,6 @@ restore_initial_value:
 													if (!menuItem){	//getting back to value edit
 														currentItem = 0;
 														for (int8_t i = 0;i<3;i++){GLCD_DrawRectangle(86,21+i*12,116,33+i*12,GLCD_White);}
-														GLCD_Render();
 														break;
 													}
 													else if (menuItem == 1){
@@ -1081,7 +1026,7 @@ restore_initial_value:
 							GLCD_Render();
 							while(button_monitor());
 							while(!button_monitor());
-							}//
+							}
 						}
 					}
 					if (currentButton == 3) {
@@ -1104,22 +1049,22 @@ restore_initial_value:
 					}
 			}
 			GLCD_InvertRect(rectShift,20,rectShift+12,36);
+			print_min_max();
 			GLCD_Render();
 		}
-		
+
 		while(button_monitor());
 		while(!button_monitor());
 	}
 }
-	
 void debug_screen(){
 	uint8_t xOfset1 = 4;
 	uint8_t xOfset2 = 26;
-	uint8_t xOfset3 = 56;
-	uint8_t xOfset4 = 82;
+	uint8_t xOfset3 = 60;
+	uint8_t xOfset4 = 86;
 	GLCD_Clear();
 	GLCD_SetFont(Font5x8, 5, 8, GLCD_Overwrite);
-	GLCD_GotoLine(1);
+	GLCD_GotoLine(0);
 	GLCD_GotoX(xOfset1);
 	GLCD_PrintString("Spd");
 	GLCD_GotoX(xOfset2);
@@ -1130,7 +1075,7 @@ void debug_screen(){
 	GLCD_GotoX(xOfset4);
 	GLCD_PrintDouble(newVoltage/10.0,100);
 	
-	GLCD_GotoLine(2);
+	GLCD_GotoLine(1);
 	GLCD_GotoX(xOfset1);
 	GLCD_PrintString("Frq");
 	GLCD_GotoX(xOfset2);
@@ -1141,7 +1086,7 @@ void debug_screen(){
 	GLCD_GotoX(xOfset4);
 	GLCD_PrintInteger(speedTimerPrecise);
 	
-	GLCD_GotoLine(3);
+	GLCD_GotoLine(2);
 	GLCD_GotoX(xOfset1);
 	GLCD_PrintString("Stp");
 	GLCD_GotoX(xOfset2);
@@ -1152,32 +1097,41 @@ void debug_screen(){
 	GLCD_GotoX(xOfset4);
 	GLCD_PrintInteger(speedTimerRough);
 	
-	GLCD_GotoLine(4);
+	GLCD_GotoLine(3);
 	GLCD_GotoX(xOfset1);
 	GLCD_PrintString("nSt");
 	GLCD_GotoX(xOfset2);
 	GLCD_PrintInteger(newSteps);
 	
 	GLCD_GotoX(xOfset3);
-	GLCD_PrintString("SRt");
+	GLCD_PrintString("tRP");
 	GLCD_GotoX(xOfset4);
 	GLCD_PrintInteger(speedTimerRoughPrevious);
 	
-	GLCD_GotoLine(5);
+	GLCD_GotoLine(4);
 	GLCD_GotoX(xOfset1);
 	GLCD_PrintString("Phs");
 	GLCD_GotoX(xOfset2);
 	GLCD_PrintInteger(phase);
 	
-	GLCD_GotoLine(6);
+	GLCD_GotoX(xOfset3);
+	GLCD_PrintString("Trn");
+	GLCD_GotoX(xOfset4);
+	GLCD_PrintString("L");
+	GLCD_PrintInteger(!(PIN_LEFT));
+	GLCD_PrintString(" R");
+	GLCD_PrintInteger(!(PIN_RIGHT));
+	
+	GLCD_GotoLine(5);
 	GLCD_GotoX(xOfset1);
-	GLCD_PrintString("TRt");
+	GLCD_PrintString("SAc");
 	GLCD_GotoX(xOfset2);
 	GLCD_PrintInteger(sensorActations);
-		
-	GLCD_GotoX(xOfset3);
+	
+	GLCD_GotoLine(6);	
+	GLCD_GotoX(xOfset1);
 	GLCD_PrintString("Mil");
-	GLCD_GotoX(xOfset4);
+	GLCD_GotoX(xOfset2);
 	GLCD_PrintDouble(milage/1000.0,100);
  	GLCD_Render();
 }
