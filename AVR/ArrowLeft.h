@@ -1,10 +1,4 @@
-/*
- * ArrowLeft.h
- *
- * Created: 28.07.2018 21:56:06
- *  Author: Vano
- */ 
-
+//ArrowLeft.h
 //92x55
 #ifndef ARROWLEFT_H_
 #define ARROWLEFT_H_

@@ -1,10 +1,4 @@
-/*
- * ArrowRight.h
- *
- * Created: 28.07.2018 21:57:15
- *  Author: Vano
- */ 
-
+//ArrowRight.h
 //92x55
 #ifndef ARROWRIGHT_H_
 #define ARROWRIGHT_H_

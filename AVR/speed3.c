@@ -181,7 +181,7 @@ void presets (void){
 	ADCSRA |= _BV(ADPS0);		//
 	ADCSRA |= _BV(ADPS1);		// ADC prescaler 128
 	ADCSRA |= _BV(ADPS2);		//
-	// reading data from EEPROM
+	//reading data from EEPROM
 	uint8_t	firstEepRead = eeprom_read_byte((uint8_t*)EEPROM_START_ADDRESS);//if the device is started for the first time the default values have to be written to EEPROM
 	if (firstEepRead){
 		set_default_values();
@@ -249,7 +249,7 @@ void step(uint8_t mode){
 	}
 	if		(phase < 0) phase = 7;
 	else if (phase > 7) phase = 0;
-	tempPort = PORTA&~0x0F;
+	tempPort = PORTA&~0x0F; 
 	if(mode == HALF_STEP)		tempPort|=phaseArrayHalfStep[phase];
 	else if(mode == FULL_STEP)  tempPort|=phaseArrayFullStep[phase];
 	PORTA = tempPort;
@@ -614,57 +614,56 @@ void menu_screen(){
 }
 void main_screen()
 {
-	if (!signalOn){
-		uint8_t offsetX = 10;
-		uint8_t offsetY = 11;
-		GLCD_Clear();
-		GLCD_DrawRectangle(offsetX,offsetY,26+offsetX,12+offsetY,GLCD_Black);
-		GLCD_DrawRectangle(27+offsetX,3+offsetY,28+offsetX,9+offsetY,GLCD_Black);
+	if (signalOn) return;
+	uint8_t offsetX = 10;
+	uint8_t offsetY = 11;
+	GLCD_Clear();
+	GLCD_DrawRectangle(offsetX,offsetY,26+offsetX,12+offsetY,GLCD_Black);
+	GLCD_DrawRectangle(27+offsetX,3+offsetY,28+offsetX,9+offsetY,GLCD_Black);
 
-		if (voltage>=BRICK_1)GLCD_FillRectangle(2+offsetX,2+offsetY,6+offsetX,10+offsetY,GLCD_Black);
-		if (voltage>=BRICK_2)GLCD_FillRectangle(8+offsetX,2+offsetY,12+offsetX,10+offsetY,GLCD_Black);
-		if (voltage>=BRICK_3)GLCD_FillRectangle(14+offsetX,2+offsetY,18+offsetX,10+offsetY, GLCD_Black);
-		if (voltage>=BRICK_4)GLCD_FillRectangle(20+offsetX,2+offsetY,24+offsetX,10+offsetY,GLCD_Black);
+	if (voltage>=BRICK_1)GLCD_FillRectangle(2+offsetX,2+offsetY,6+offsetX,10+offsetY,GLCD_Black);
+	if (voltage>=BRICK_2)GLCD_FillRectangle(8+offsetX,2+offsetY,12+offsetX,10+offsetY,GLCD_Black);
+	if (voltage>=BRICK_3)GLCD_FillRectangle(14+offsetX,2+offsetY,18+offsetX,10+offsetY, GLCD_Black);
+	if (voltage>=BRICK_4)GLCD_FillRectangle(20+offsetX,2+offsetY,24+offsetX,10+offsetY,GLCD_Black);
 
-		GLCD_GotoXY(33+offsetX, 4+offsetY);
-		GLCD_SetFont(Font5x8, 5, 8, GLCD_Overwrite);
-		GLCD_PrintDouble(voltage/10.0,10);
-		GLCD_PrintString("V");
+	GLCD_GotoXY(33+offsetX, 4+offsetY);
+	GLCD_SetFont(Font5x8, 5, 8, GLCD_Overwrite);
+	GLCD_PrintDouble(voltage/10.0,10);
+	GLCD_PrintString("V");
 
-		GLCD_SetFont(Arial_Narrow18x32, 18, 32, GLCD_Overwrite);
-		GLCD_GotoXY(4, 31);
+	GLCD_SetFont(Arial_Narrow18x32, 18, 32, GLCD_Overwrite);
+	GLCD_GotoXY(4, 31);
 
-		uint32_t tempMilage = milage/100;
-		int8_t l = 0;
+	uint32_t tempMilage = milage/100;
+	int8_t l = 0;
 		
-		while(tempMilage){
-			tempMilage/=10;
-			l++;
-		}
-		if (l<2) l = 2;
-		int8_t zeros = 6-l;
-				for (int8_t i = 0;i<zeros;i++){
-					GLCD_PrintString("0");
-				}
-		GLCD_PrintInteger(milage/1000);
-		if(milage<100000000){	
-			GLCD_PrintString(".");
-			GLCD_PrintInteger((milage%1000)/100);
-		}
-		GLCD_Render();
+	while(tempMilage){
+		tempMilage/=10;
+		l++;
 	}
+	if (l<2) l = 2;
+	int8_t zeros = 6-l;
+			for (int8_t i = 0;i<zeros;i++){
+				GLCD_PrintString("0");
+			}
+	GLCD_PrintInteger(milage/1000);
+	if(milage<100000000){	
+		GLCD_PrintString(".");
+		GLCD_PrintInteger((milage%1000)/100);
+	}
+	GLCD_Render();
 }
 void arrow_position_update(){
 	newSteps = speedKmh/kmhPerStep;
 	int16_t shiftSteps = steps - newSteps;	//difference in speedometer readings (for how many steps arrow should be shifted)
-	if (shiftSteps!=0){
-		if (shiftSteps > 0) dir = 0; else dir = 1;
-		arrowMoving = 1;
-		//Timer0 is used to generate pulses for Stepper Motor driver
-		TCCR0|=_BV(CS02)|_BV(CS00)|_BV(WGM01); //prescaler 1024 (1 tic = 64us)
-		OCR0 = stepInterval;	//interval between steps (Affects Stepper Motor Rotation Speed)
-		TIMSK|=_BV(OCIE0);
-	}
+	if (shiftSteps==0)return;
+	if (shiftSteps > 0) dir = 0; else dir = 1;
+	arrowMoving = 1;
+	//Timer0 is used to generate pulses for Stepper Motor driver
+	TCCR0|=_BV(CS02)|_BV(CS00)|_BV(WGM01); //prescaler 1024 (1 tic = 64us)
+	OCR0 = stepInterval;	//interval between steps (Affects Stepper Motor Rotation Speed)
+	TIMSK|=_BV(OCIE0);
+	
 }
 void calculate_speed(){
 	if(speedTimerRough>speedTimerRoughPrevious+PERIOD_INCREASE_TRESHOLD/magnetsOnWheel){	//If speed suddenly reduces to zero then next actuation of Hall sensor is not going to happen, so speedTimerRoughPrevious and previousTCNT2 will not be updated
@@ -710,19 +709,18 @@ void signal_monitor(){
 		signalOn = 1;
 		signalCounter = 0;
 	}
-	if (signalOn){
-		if((PIN_LEFT)&&(PIN_RIGHT)){
-			GLCD_Clear();
-			GLCD_Render();
-			TIMSK|=_BV(TOIE1);		// If the turn signal (arrow) was switched on, and at the moment the turn signals are not lit, the timer is started.
-		}							// In order to define if this is the interval between the blinking of the turn signals, or if the turn signal is already off.
-		if (signalCounter > SIGNAL_COUNTER_MAX)	// if interval is longer then the interval between the blinks - stop displaying turn/hazard sign
-		{
-			signalOn = 0;
-			signalCounter = 0;
-			TIMSK&=~_BV(TOIE1);
-			main_screen();
-		}
+	if (!signalOn) return;
+	if((PIN_LEFT)&&(PIN_RIGHT)){
+		GLCD_Clear();
+		GLCD_Render();
+		TIMSK|=_BV(TOIE1);		// If the turn signal (arrow) was switched on, and at the moment the turn signals are not lit, the timer is started.
+	}							// In order to define if this is the interval between the blinking of the turn signals, or if the turn signal is already off.
+	if (signalCounter > SIGNAL_COUNTER_MAX)	// if interval is longer then the interval between the blinks - stop displaying turn/hazard sign
+	{
+		signalOn = 0;
+		signalCounter = 0;
+		TIMSK&=~_BV(TOIE1);
+		main_screen();
 	}
 }
 void data_monitor(){
@@ -846,7 +844,7 @@ void eep_operations (uint16_t eepStartAddress, uint8_t eepAddrShift, uint8_t eep
 		eeprom_update_float((float*)(eepStartAddress+=eepAddrShift),gearRatio);
 		eeprom_update_float((float*)(eepStartAddress+=eepAddrShift),degreesPerKmh);
 	}
-	if(eepAction==EEP_READ){
+	else if(eepAction==EEP_READ){
 		pwmArrowLight = eeprom_read_word((uint16_t*)(eepStartAddress+=eepAddrShift));
 		if ((pwmArrowLight>PWM_ARROW_MAX)||(pwmArrowLight<PWM_ARROW_MIN))pwmArrowLight=PWM_ARROW_DEFAULT;
 		pwmDialLight = eeprom_read_word((uint16_t*)(eepStartAddress+=eepAddrShift));
@@ -870,7 +868,7 @@ void eep_operations (uint16_t eepStartAddress, uint8_t eepAddrShift, uint8_t eep
 		degreesPerKmh = eeprom_read_float((float*)(eepStartAddress+=eepAddrShift));
 		if ((degreesPerKmh>DEGREES_PER_KMH_MAX)||(degreesPerKmh<DEGREES_PER_KMH_MIN))degreesPerKmh=DEGREES_PER_KMH_DEFAULT;
 	}
-	if (eepAction==EEP_ODOMETER_READ){
+	else if (eepAction==EEP_ODOMETER_READ){
 		uint32_t tempMilage = 0;
 		odometerCurrentAddress = 0;
 		for (uint8_t i = 0;i<=ODOMETER_EEP_CELLS;i++){
@@ -882,15 +880,15 @@ void eep_operations (uint16_t eepStartAddress, uint8_t eepAddrShift, uint8_t eep
 			}
 		}
 	}
-	if (eepAction==EEP_ODOMETER_WRITE){
+	else if (eepAction==EEP_ODOMETER_WRITE){
 			eeprom_write_dword((uint32_t*)(eepStartAddress+(odometerCurrentAddress*eepAddrShift)),milage);
 			odometerCurrentAddress++;
 			if (odometerCurrentAddress>ODOMETER_EEP_CELLS)odometerCurrentAddress = 0;
 	}
 }
 uint16_t set_value (uint16_t maxValue, uint16_t minValue, uint16_t currValue, uint8_t tens, const char *text){
-	GLCD_SetFont(Font5x8, 5, 8, GLCD_Overwrite);
 	GLCD_Clear();
+	GLCD_SetFont(Font5x8, 5, 8, GLCD_Overwrite);
 	GLCD_GotoLine(1);
 	GLCD_GotoX(10);
 	GLCD_PrintString(text);
@@ -928,10 +926,8 @@ uint16_t set_value (uint16_t maxValue, uint16_t minValue, uint16_t currValue, ui
 	int8_t *digitsArr;
 	int8_t currentItem = 0;
 restore_initial_value:
-
 	tempValue = currValue;
 	valueLength = 0;
-
 	uint16_t new_value (void)	//gathering digits back to the integer
 	{
 		uint16_t newValue = 0;
@@ -967,7 +963,6 @@ restore_initial_value:
 			digitsArr[digitIndex] = 0;	//if current value is shorter then maximum value - set extra digits to zero
 		}
 	}
-	
 	GLCD_GotoXY(5,20);
 	GLCD_SetFont(Arial12x17, 12, 17, GLCD_Overwrite);
 	int8_t rectShift = (5+(maxValueLength-1)*13)-currentItem*13;
@@ -998,28 +993,26 @@ restore_initial_value:
 								while(button_monitor());
 								while(1){
 										currentButton = button_monitor();
-										if(currentButton){
-											if (currentButton == 3) {
-												menuItem--;
-												if (menuItem<0)menuItem = 2;
-											}
-											else if (currentButton == 2) {
-												menuItem++;
-												if (menuItem>2)menuItem = 0;
-											}
-											else if (currentButton == 1) {
-													if (!menuItem){	//getting back to value edit
-														currentItem = 0;
-														for (int8_t i = 0;i<3;i++){GLCD_DrawRectangle(86,21+i*12,116,33+i*12,GLCD_White);}
-														break;
-													}
-													else if (menuItem == 1){
-														return currValue; //if changes discarded - return initial value
-													}
-													else if (menuItem == 2){
-														return new_value();
-													}
-											}
+										if (currentButton == 3) {
+											menuItem--;
+											if (menuItem<0)menuItem = 2;
+										}
+										else if (currentButton == 2) {
+											menuItem++;
+											if (menuItem>2)menuItem = 0;
+										}
+										else if (currentButton == 1) {
+												if (!menuItem){	//getting back to value edit
+													currentItem = 0;
+													for (int8_t i = 0;i<3;i++){GLCD_DrawRectangle(86,21+i*12,116,33+i*12,GLCD_White);}
+													break;
+												}
+												else if (menuItem == 1){
+													return currValue; //if changes discarded - return initial value
+												}
+												else if (menuItem == 2){
+													return new_value();
+												}
 										}
 							for (int8_t i=0;i<3;i++)GLCD_DrawRectangle(86,21+i*12,116,33+i*12,GLCD_White);
 							GLCD_DrawRectangle(86,21+menuItem*12,116,33+menuItem*12,GLCD_Black);
@@ -1040,19 +1033,14 @@ restore_initial_value:
 			GLCD_GotoXY(5,20);
 			for(digitIndex = maxValueLength - 1;digitIndex>=0;digitIndex--){
 				GLCD_PrintInteger(digitsArr[digitIndex]);
-				if ((digitIndex==tens)&&(tens)) {GLCD_PrintString(".");}
+				if ((tens)&&(digitIndex==tens)) {GLCD_PrintString(".");}
 			}
 			rectShift = (5+(maxValueLength-1)*13)-currentItem*13;
-			if (tens){
-					if(currentItem<tens){
-						rectShift+=5;
-					}
-			}
+			if ((tens)&&(currentItem<tens))	rectShift+=5;
 			GLCD_InvertRect(rectShift,20,rectShift+12,36);
 			print_min_max();
 			GLCD_Render();
 		}
-
 		while(button_monitor());
 		while(!button_monitor());
 	}
