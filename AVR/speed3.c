@@ -71,13 +71,13 @@ double kmhPerStep = 0;
 uint16_t newSteps = 0;	//required stepper motor shaft position
 uint8_t signalOn = 0;	//if turn or hazard lights on, = 1
 uint8_t firstMeasure = 0;
-uint8_t debugMode = 0;	//0
+uint8_t debugMode = 0;	
 int16_t voltage = 0;
 uint8_t odometerCurrentAddress = 0;
 uint8_t dir = 0;
 uint16_t signalCounter = 0;//counter of turn lights interval
 uint32_t runInMeters = 0;	
-int8_t handCalibrated = 1;	//0
+int8_t handCalibrated = 0;
 			//values of these variables are stored in EEPROM and could be changed from GUI
 uint8_t oledBrightness; 
 #define OLED_BRIGHTNESS_DEFAULT 250
@@ -100,13 +100,13 @@ double degreesPerKmh;
 #define DEGREES_PER_KMH_MIN 0.1
 #define DEGREES_PER_KMH_MAX 5
 uint16_t pwmHandLight;
-#define PWM_HAND_DEFAULT 1024
+#define PWM_HAND_DEFAULT 1023
 #define PWM_HAND_MIN 0
-#define PWM_HAND_MAX 1024
+#define PWM_HAND_MAX 1023
 uint16_t pwmDialLight;
-#define PWM_DIAL_DEFAULT 1024
+#define PWM_DIAL_DEFAULT 128
 #define PWM_DIAL_MIN 0
-#define PWM_DIAL_MAX 1024
+#define PWM_DIAL_MAX 1023
 uint8_t maxSpeedOnDial;	
 #define MAX_SPEED_DEFAULT 190
 #define MAX_SPEED_MIN 20
@@ -258,7 +258,7 @@ void step(uint8_t mode){
 		phase--;
 		steps--;
 	}
-	if		(phase < 0) phase = 7;
+	if (phase < 0) phase = 7;
 	else if (phase > 7) phase = 0;
 	tempPort = PORTA&~0x0F; 
 	if(mode == HALF_STEP)		tempPort|=phaseArrayHalfStep[phase];
@@ -317,7 +317,7 @@ void menu_screen(){
 				GLCD_Render();
 				while(button_monitor());
 			}
-			else if(button==1) return yesOrNo;
+			else if(button==BUTTON_SET) return yesOrNo;
 		}
 	}
 	uint8_t offset = 91;
@@ -615,13 +615,12 @@ void menu_screen(){
 					}
 				}//
 			}
-		else if(currentButton == BUTTON_DOWN)	menuItem++;
+		else if(currentButton == BUTTON_DOWN) menuItem++;
 		else if(currentButton == BUTTON_UP)	menuItem--;
 		while (!button_monitor());
 		menu_screen();
 		}
 	}
-	
 }
 void main_screen()
 {
@@ -765,30 +764,29 @@ void data_monitor(){
 	}
 }
 uint8_t button_monitor(){
-	uint8_t btnPressed = 0;
+	
 	if ((PIN_SET)&&(PIN_DOWN)&&(PIN_UP)){
-		btnPressed = BUTTON_NONE;
 		return BUTTON_NONE;
 	}
-	else if((!(PIN_SET))&&(!btnPressed)){
+	if(!(PIN_SET)){
 		_delay_ms(BOUNCE_DELAY);
 		if(!(PIN_SET)){
-			btnPressed = BUTTON_SET;
+			return BUTTON_SET;
 		}
 	}
-	else if((!(PIN_DOWN))&&(!btnPressed)){
+	if(!(PIN_DOWN)){
 		_delay_ms(BOUNCE_DELAY);
 		if(!(PIN_DOWN)){
-			btnPressed = BUTTON_DOWN;
+			return BUTTON_DOWN;
 		}
 	}
-	else if((!(PIN_UP))&&(!btnPressed)){
+	if(!(PIN_UP)){
 		_delay_ms(BOUNCE_DELAY);
 		if(!(PIN_UP)){
-			btnPressed = BUTTON_UP;
+			return BUTTON_UP;
 		}
 	}
-	return btnPressed;
+	return BUTTON_NONE;
 }
 void hand_calibration(){
 	steps = 0;
@@ -829,7 +827,7 @@ void draw_arrow (uint8_t arrowDir){
 void draw_skull (void)
 {
 	GLCD_Clear();
-	GLCD_GotoXY(27-8, 7);
+	GLCD_GotoXY(27, 7);
 	GLCD_DrawBitmap(skull,86,52,GLCD_Black);
 	GLCD_Render();
 }
@@ -955,7 +953,6 @@ restore_initial_value:
 		}
 		return newValue;
 	}
-	
 	while(tempValue)       //finding the number of digits for current value
 		{
 		   tempValue = tempValue / 10;

@@ -3,9 +3,9 @@
  <FRAME activewindow="0">
   <PLACEMENT>2c00000002000000030000000083ffff0083ffffffffffffffffffff8300000009000000d3040000cf020000</PLACEMENT>
   <WINDOW type="default" module="ISIS">
-   <editor metric="0" gridmajor="2540000" mode="00000000" zoom="-1" scale="204" flipped="0" gridminor="254000" gridmode="32" snapidx="2" snap="254000" xcursor="0" orgmode="0" snaprange="127000">
+   <editor metric="0" gridmajor="25400000" mode="00000000" zoom="-1" scale="66" flipped="0" gridminor="508000" gridmode="32" snapidx="2" snap="254000" xcursor="0" orgmode="0" snaprange="192424">
     <world y1="-40640000" x1="-55880000" y2="40640000" x2="55880000"/>
-    <centre x="-25654000" y="21590000"/>
+    <centre x="6604000" y="3839634"/>
     <origin x="0" y="0"/>
    </editor>
   </WINDOW>
@@ -18,9 +18,9 @@
   </editor>
  </MODULE>
  <MODULE name="ISIS">
-  <editor metric="0" gridmajor="2540000" mode="00000000" zoom="-1" scale="204" flipped="0" gridminor="254000" gridmode="32" snapidx="2" snap="254000" xcursor="0" orgmode="0" snaprange="127000">
+  <editor metric="0" gridmajor="25400000" mode="00000000" zoom="-1" scale="66" flipped="0" gridminor="508000" gridmode="32" snapidx="2" snap="254000" xcursor="0" orgmode="0" snaprange="192424">
    <world y1="-40640000" x1="-55880000" y2="40640000" x2="55880000"/>
-   <centre x="-25654000" y="21590000"/>
+   <centre x="6604000" y="3839634"/>
    <origin x="0" y="0"/>
   </editor>
  </MODULE>
@@ -52,13 +52,13 @@
      <ITEM name="nItems">0</ITEM>
     </PROPERTIES>
    </POPUP>
-   <POPUP w="695" x="1105" flags="00000001" y="295" h="448" pid="0" iid="2">
+   <POPUP w="695" x="1052" flags="00008001" y="374" h="448" pid="0" iid="2">
     <PROPERTIES/>
    </POPUP>
-   <POPUP w="695" x="1025" flags="00000001" y="275" h="448" pid="0" iid="46">
+   <POPUP w="695" x="1042" flags="00000001" y="400" h="448" pid="0" iid="46">
     <PROPERTIES/>
    </POPUP>
-   <POPUP w="511" x="1041" flags="00008001" y="187" h="142" pid="0" iid="42">
+   <POPUP w="511" x="855" flags="00000001" y="582" h="142" pid="0" iid="42">
     <PROPERTIES/>
    </POPUP>
    <POPUP w="16" x="168" flags="0000000a" y="228" h="16" pid="256" iid="1">
